@@ -13,6 +13,7 @@ class MultiProcessWorker(mp.Process):
         self.comm = comm
 
     def run(self):
+        torch.set_num_threads(1)
         torch.manual_seed(self.seed + self.id + 1)
         np.random.seed(self.seed + self.id + 1)
 

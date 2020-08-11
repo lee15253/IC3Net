@@ -181,6 +181,7 @@ if args.nprocesses > 1:
     trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
 else:
     trainer = Trainer(args, policy_net, data.init(args.env_name, args))
+    torch.set_num_threads(1)
 
 disp_trainer = Trainer(args, policy_net, data.init(args.env_name, args, False))
 disp_trainer.display = True
