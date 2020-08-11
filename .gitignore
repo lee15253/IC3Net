@@ -103,3 +103,5 @@ ENV/
 # Models
 *.onnx
 *.pt
+
+.idea
