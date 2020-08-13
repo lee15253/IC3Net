@@ -8,8 +8,7 @@ from utils import *
 from action_utils import *
 
 Transition = namedtuple('Transition', ('state', 'action', 'action_out', 'value', 'episode_mask', 'episode_mini_mask', 'next_state',
-                                       'reward', 'misc'))
-
+                                       'reward', 'misc', 'latent'))
 
 class Trainer(object):
     def __init__(self, args, policy_net, env):
@@ -51,7 +50,10 @@ class Trainer(object):
                     prev_hid = self.policy_net.init_hidden(batch_size=state.shape[0])
 
                 x = [state, prev_hid]
-                action_out, value, prev_hid = self.policy_net(x, info)
+                if self.args.qbn:
+                    action_out, value, prev_hid, latent = self.policy_net(x, info)
+                else:
+                    action_out, value, prev_hid = self.policy_net(x, info)
 
                 if (t + 1) % self.args.detach_gap == 0:
                     if self.args.rnn_type == 'LSTM':
@@ -101,7 +103,10 @@ class Trainer(object):
             if should_display:
                 self.env.display()
 
-            trans = Transition(state, action, action_out, value, episode_mask, episode_mini_mask, next_state, reward, misc)
+            if self.args.qbn:
+                trans = Transition(state, action, action_out, value, episode_mask, episode_mini_mask, next_state, reward, misc, latent)
+            else:
+                trans = Transition(state, action, action_out, value, episode_mask, episode_mini_mask, next_state, reward, misc, None)
             episode.append(trans)
             state = next_state
             if done:
@@ -119,7 +124,6 @@ class Trainer(object):
             stat['reward'] = stat.get('reward', 0) + reward[:self.args.nfriendly]
             if hasattr(self.args, 'enemy_comm') and self.args.enemy_comm:
                 stat['enemy_reward'] = stat.get('enemy_reward', 0) + reward[self.args.nfriendly:]
-
 
         if hasattr(self.env, 'get_stat'):
             merge_stat(self.env.get_stat(), stat)
