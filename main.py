@@ -2,6 +2,7 @@ import sys
 import time
 import signal
 import argparse
+import os
 
 import numpy as np
 import torch
@@ -185,7 +186,6 @@ if args.nprocesses > 1:
     trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
 else:
     trainer = Trainer(args, policy_net, data.init(args.env_name, args))
-    torch.set_num_threads(1)
 
 disp_trainer = Trainer(args, policy_net, data.init(args.env_name, args, False))
 disp_trainer.display = True
@@ -265,6 +265,9 @@ def run(num_epochs):
 
 def save(path):
     d = dict()
+    dir = os.path.dirname(path)
+    if not (os.path.exists(dir)):
+        os.makedirs(dir)
     d['policy_net'] = policy_net.state_dict()
     d['log'] = log
     d['trainer'] = trainer.state_dict()
