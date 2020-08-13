@@ -205,8 +205,11 @@ class CommNetMLP(nn.Module):
             comm_sum = comm.sum(dim=1)
             c = self.C_modules[i](comm_sum)
 
-
             if self.args.recurrent:
+                if self.args.qbn:
+                    o_t = x.clone()
+                    c_t = c.clone()
+                    h_t = hidden_state.clone()
                 # skip connection - combine comm. matrix and encoded input for all agents
                 inp = x + c
 
@@ -239,7 +242,18 @@ class CommNetMLP(nn.Module):
             action = [F.log_softmax(head(h), dim=-1) for head in self.heads]
 
         if self.args.recurrent:
-            return action, value_head, (hidden_state.clone(), cell_state.clone())
+            if self.args.qbn:
+                h_t1 = hidden_state.clone()
+                # TODO: it works in predator-pery but not sure whether other environments have only one action-head
+                a_t = action[0].clone()
+                latent = {'h_t':h_t,
+                          'o_t':o_t,
+                          'c_t':c_t,
+                          'a_t':a_t,
+                          'h_t1':h_t1}
+                return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
+            else:
+                return action, value_head, (hidden_state.clone(), cell_state.clone())
         else:
             return action, value_head
 
