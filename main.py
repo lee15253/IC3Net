@@ -14,6 +14,7 @@ from utils import *
 from action_utils import parse_action_args
 from trainer import Trainer
 from multi_processing import MultiProcessTrainer
+import ipdb
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -109,6 +110,7 @@ parser.add_argument('--advantages_per_action', default=False, action='store_true
 parser.add_argument('--share_weights', default=False, action='store_true',
                     help='Share weights for hops')
 
+# pdb.set_trace()
 
 init_args_for_env(parser)
 args = parser.parse_args()
@@ -208,13 +210,14 @@ def run(num_epochs):
     for ep in range(num_epochs):
         epoch_begin_time = time.time()
         stat = dict()
+        # ipdb.set_trace()
         for n in range(args.epoch_size):
             if n == args.epoch_size - 1 and args.display:
                 trainer.display = True
             s = trainer.train_batch(ep)
             merge_stat(s, stat)
             trainer.display = False
-
+        # ipdb.set_trace()
         epoch_time = time.time() - epoch_begin_time
         epoch = len(log['epoch'].data) + 1
         for k, v in log.items():
@@ -283,6 +286,7 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+ipdb.set_trace()
 if args.load != '':
     load(args.load)
 
