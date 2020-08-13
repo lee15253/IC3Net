@@ -289,7 +289,7 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-ipdb.set_trace()
+# ipdb.set_trace()
 if args.load != '':
     load(args.load)
 
