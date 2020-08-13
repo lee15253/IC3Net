@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import time
 import sys
 from torch.autograd import Variable
+import ipdb
 
 LogField = namedtuple('LogField', ('data', 'plot', 'x_axis', 'divide_by'))
 
@@ -39,7 +40,9 @@ def normal_log_density(x, mean, log_std, std):
     log_density = -(x - mean).pow(2) / (2 * var) - 0.5 * math.log(2 * math.pi) - log_std
     return log_density.sum(1, keepdim=True)
 
+
 def multinomials_log_density(actions, log_probs):
+    # ipdb.set_trace()
     log_prob = 0
     for i in range(len(log_probs)):
         log_prob += log_probs[i].gather(1, actions[:, i].long().unsqueeze(1))

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from model_def import *
 import torch.nn.functional as F
 from env_wrapper import atari_wrapper
+import ipdb
 
 
 def calculate_outputs_and_gradients_steps(inputs, model, original_image_x, input_before_quantized, cuda=False, grad_clip=1, feed_tTanh=False):
@@ -66,8 +67,9 @@ def plot_GIs_together(path, IGs):
     fig.clf()
 
 
-def gather_observations(env_name, gru_size, bhx_size, ox_size, bgru_net_path, episodes=1, cuda=False, env_type='atari'):
-    if os.path.exists('./results/' + env_type + '/' + str(env_name) + '/observations.pt'):
+def gather_observations(env_name, gru_size, bhx_size, ox_size, bgru_net_path, episodes=1, cuda=False, env_type='atari', scratch=False):
+    # ipdb.set_trace()
+    if not scratch and os.path.exists('./results/' + env_type + '/' + str(env_name) + '/observations.pt'):
         observations = torch.load('./results/' + env_type + '/' + str(env_name) + '/observations.pt')
         observations_x = torch.load('./results/' + env_type + '/' + str(env_name) + '/observations_x.pt')
         observations_tanh = torch.load('./results/' + env_type + '/' + str(env_name) + '/observations_tanh.pt')

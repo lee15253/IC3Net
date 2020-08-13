@@ -6,6 +6,7 @@ from torch import optim
 import torch.nn as nn
 from utils import *
 from action_utils import *
+import ipdb
 
 Transition = namedtuple('Transition', ('state', 'action', 'action_out', 'value', 'episode_mask', 'episode_mini_mask', 'next_state',
                                        'reward', 'misc'))
@@ -65,6 +66,7 @@ class Trainer(object):
             action = select_action(self.args, action_out)
             action, actual = translate_action(self.args, self.env, action)
             next_state, reward, done, info = self.env.step(actual)
+            # ipdb.set_trace()
 
             # store comm_action in info for next step
             if self.args.hard_attn and self.args.commnet:
@@ -162,6 +164,8 @@ class Trainer(object):
         prev_value = 0
         prev_advantage = 0
 
+        #ipdb.set_trace()
+
         for i in reversed(range(rewards.size(0))):
             coop_returns[i] = rewards[i] + self.args.gamma * prev_coop_return * episode_masks[i]
             ncoop_returns[i] = rewards[i] + self.args.gamma * prev_ncoop_return * episode_masks[i] * episode_mini_masks[i]
@@ -172,17 +176,19 @@ class Trainer(object):
             returns[i] = (self.args.mean_ratio * coop_returns[i].mean()) \
                         + ((1 - self.args.mean_ratio) * ncoop_returns[i])
 
-
+        #ipdb.set_trace()
         for i in reversed(range(rewards.size(0))):
             advantages[i] = returns[i] - values.data[i]
 
         if self.args.normalize_rewards:
             advantages = (advantages - advantages.mean()) / advantages.std()
 
+        # ipdb.set_trace()
         if self.args.continuous:
             action_means, action_log_stds, action_stds = action_out
             log_prob = normal_log_density(actions, action_means, action_log_stds, action_stds)
         else:
+            # action, gating 두개의 polcy loss 합한게 밑의 action_loss
             log_p_a = [action_out[i].view(-1, num_actions[i]) for i in range(dim_actions)]
             actions = actions.contiguous().view(-1, dim_actions)
 

@@ -1,8 +1,10 @@
 import numpy as np
 import torch
 from torch.autograd import Variable
+import ipdb
 
 def parse_action_args(args):
+    # ipdb.set_trace()
     if args.num_actions[0] > 0:
         # environment takes discrete action
         args.continuous = False
@@ -30,12 +32,14 @@ def select_action(args, action_out):
         action = torch.normal(action_mean, action_std)
         return action.detach()
     else:
+        # ipdb.set_trace()
         log_p_a = action_out
         p_a = [[z.exp() for z in x] for x in log_p_a]
         ret = torch.stack([torch.stack([torch.multinomial(x, 1).detach() for x in p]) for p in p_a])
         return ret
 
 def translate_action(args, env, action):
+    # ipdb.set_trace()
     if args.num_actions[0] > 0:
         # environment takes discrete action
         action = [x.squeeze().data.numpy() for x in action]

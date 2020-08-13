@@ -4,6 +4,7 @@ from env_wrapper import atari_wrapper
 from model_def import *
 import argparse
 import os
+import ipdb
 
 
 if __name__ == '__main__':
@@ -16,14 +17,19 @@ if __name__ == '__main__':
     parser.add_argument('--qbn_sizes', nargs=2, type=int, help='HX_QBN size and OX_QBN size')
     parser.add_argument('--gru_size', type=str, help='GRU cell size')
     parser.add_argument('--env_seed', type=int, default=1, help='environment seed')
+    parser.add_argument('--scratch', action='store_true', default=False, help='train quantized_net from scratch')
     args = parser.parse_args()
 
+    # ipdb.set_trace()
     env_name = args.env
     qbn_sizes = str((args.qbn_sizes[0], args.qbn_sizes[1])).replace(" ", "")
     model_path = "../results/Atari/" + env_name + "/gru_" + args.gru_size + "_hx_" + str(qbn_sizes) + "_bgru/model.p"
-
-    saved_observations, saved_observations_x, saved_observations_tanh = gather_observations(env_name, int(args.gru_size), args.qbn_sizes[0], args.qbn_sizes[1], model_path, episodes=1, cuda=args.cuda, env_type=args.env_type)
-
+    ipdb.set_trace()
+    saved_observations, saved_observations_x, saved_observations_tanh = gather_observations(
+                        env_name, int(args.gru_size), args.qbn_sizes[0], args.qbn_sizes[1],
+                        model_path, episodes=1, cuda=args.cuda, env_type=args.env_type, scratch=args.scratch)
+    ipdb.set_trace()
+    
     if not os.path.exists('results/'):
         os.mkdir('results/')
     if not os.path.exists('results/' + args.env_type):

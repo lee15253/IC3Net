@@ -13,6 +13,7 @@ from utils import *
 from action_utils import parse_action_args
 from trainer import Trainer
 from multi_processing import MultiProcessTrainer
+import ipdb
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -129,10 +130,13 @@ if hasattr(args, 'enemy_comm') and args.enemy_comm:
     else:
         raise RuntimeError("Env. needs to pass argument 'nenemy'.")
 
+# ipdb.set_trace()
 env = data.init(args.env_name, args, False)
 
 num_inputs = env.observation_dim
 args.num_actions = env.num_actions
+
+# ipdb.set_trace()
 
 # Multi-action
 if not isinstance(args.num_actions, (list, tuple)): # single action case
@@ -160,7 +164,7 @@ torch.manual_seed(args.seed)
 
 print(args)
 
-
+# ipdb.set_trace()
 if args.commnet:
     policy_net = CommNetMLP(args, num_inputs)
 elif args.random:
@@ -211,6 +215,7 @@ def run(num_epochs):
         for n in range(args.epoch_size):
             if n == args.epoch_size - 1 and args.display:
                 trainer.display = True
+            # ipdb.set_trace()
             s = trainer.train_batch(ep)
             merge_stat(s, stat)
             trainer.display = False

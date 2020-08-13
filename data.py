@@ -2,6 +2,7 @@ import sys
 import gym
 import ic3net_envs
 from env_wrappers import *
+import ipdb
 
 def init(env_name, args, final_init=True):
     if env_name == 'levers':
@@ -20,6 +21,7 @@ def init(env_name, args, final_init=True):
         env.multi_agent_init(args)
         env = GymWrapper(env)
     elif env_name == 'traffic_junction':
+        # ipdb.set_trace()
         env = gym.make('TrafficJunction-v0')
         if args.display:
             env.init_curses()

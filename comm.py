@@ -4,6 +4,7 @@ from torch import nn
 
 from models import MLP
 from action_utils import select_action, translate_action
+import ipdb
 
 class CommNetMLP(nn.Module):
     """
@@ -116,7 +117,7 @@ class CommNetMLP(nn.Module):
 
         if self.args.recurrent:
             x, extras = x
-            x = self.encoder(x)
+            x = self.encoder(x)  # Linear
 
             if self.args.rnn_type == 'LSTM':
                 hidden_state, cell_state = extras
@@ -160,6 +161,7 @@ class CommNetMLP(nn.Module):
         #     x = torch.cat([x, maxi], dim=-1)
         #     x = self.tanh(x)
 
+        # ipdb.set_trace()
         x, hidden_state, cell_state = self.forward_state_encoder(x)
 
         batch_size = x.size()[0]
@@ -205,7 +207,7 @@ class CommNetMLP(nn.Module):
             comm_sum = comm.sum(dim=1)
             c = self.C_modules[i](comm_sum)
 
-
+            # ipdb.set_trace()
             if self.args.recurrent:
                 # skip connection - combine comm. matrix and encoded input for all agents
                 inp = x + c
@@ -227,6 +229,7 @@ class CommNetMLP(nn.Module):
         # v = v.view(hidden_state.size(0), n, -1)
         value_head = self.value_head(hidden_state)
         h = hidden_state.view(batch_size, n, self.hid_size)
+        # ipdb.set_trace()
 
         if self.continuous:
             action_mean = self.action_mean(h)

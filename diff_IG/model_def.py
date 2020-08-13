@@ -3,6 +3,7 @@ import torch.nn as nn
 from functions import TernaryTanh
 from torch.autograd import Variable
 import tools as tl
+import ipdb
 
 class HxQBNet(nn.Module):
     """
@@ -37,7 +38,7 @@ class HxQBNet(nn.Module):
     def decode(self, x):
         return self.decoder(x)
 
-
+# kind of wrapper for GRUNet
 class MMNet(nn.Module):
     """
     Moore Machine Network(MMNet) definition.
@@ -64,13 +65,17 @@ class MMNet(nn.Module):
             return input_c
 
     def get_action_linear(self, state, decode=False):
-        if decode:
+        # TODO: 언제쓰지?
+        ipdb.set_trace()
+        if decode:  # quantize를 시킨 경우인듯?
             hx = self.bhx_net.decode(state)
         else:
             hx = state
         return self.actor_linear(hx)
 
     def transact(self, o_x, hx_x):
+        # TODO: 언제쓰지?
+        ipdb.set_trace()
         hx_x = self.gru_net.transact(self.obx_net.decode(o_x), self.bhx_net.decode(hx_x))
         _, hx_x = self.bhx_net(hx_x)
         return hx_x
@@ -106,6 +111,7 @@ class ObsQBNet(nn.Module):
                                      nn.Linear(f1, input_size),
                                      nn.ReLU6())
 
+    # TODO: before_ttanh 왜 따로 빼지?
     def forward(self, x):
         encoded, before_ttanh = self.encode(x)
         decoded = self.decode(encoded)
@@ -144,6 +150,7 @@ class GRUNet(nn.Module):
         self.input_c_shape = (8, 5, 5)
         self.gru = nn.GRUCell(self.input_c_features, gru_cells)
 
+        # critic, actor head
         self.critic_linear = nn.Linear(gru_cells, 1)
         self.actor_linear = nn.Linear(gru_cells, total_actions)
 
@@ -161,22 +168,31 @@ class GRUNet(nn.Module):
             input, hx = input
             c_input = self.input_ff(input)
             c_input = c_input.view(-1, self.input_c_features)
+            # if input_fn -> quantize fx / else -> not quantize (original)
             input, input_x, linear2 = input_fn(c_input) if input_fn is not None else (c_input, c_input)
             ghx = self.gru(input, hx)
+            # if hx_fn -> quantze hx / else -> not quantize (original)
             hx, bhx = hx_fn(ghx) if hx_fn is not None else (ghx, ghx)
+            '''
+            ghx -> (quantize) -> bhx -> (de-quantize) -> hx
+            c_input  -> (quantize) -> input_x -> (de-quantize) -> input
+            '''
             return self.critic_linear(hx), self.actor_linear(hx), hx, (ghx, bhx, c_input, input_x, linear2)
         else:
+            # TODO: 왜 여기선 gru까지 안가지? 
             c_input = self.input_ff(input)
             c_input = c_input.view(-1, self.input_c_features)
             input, input_x, linear2 = input_fn(c_input) if input_fn is not None else (c_input, c_input)
             return c_input, input_x, linear2
 
+    # h0 init
     def init_hidden(self, batch_size=1):
         return torch.zeros(batch_size, self.gru_units)
 
     def get_action_linear(self, state):
         return self.actor_linear(state)
 
+    # using in fsm minimization
     def transact(self, o_x, hx):
         hx = self.gru(o_x, hx)
         return hx
