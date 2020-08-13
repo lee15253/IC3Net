@@ -208,23 +208,21 @@ if args.plot:
 def run():
     begin_time = time.time()
     stat = dict()
+    # 1. Collect Trajectory from the trained recurrent Model
     for n in range(args.num_batch_steps):
         batch, s = trainer.run_batch(epoch=n) # size of the batch is args.batch_size
         merge_stat(s, stat)
         import pdb
         pdb.set_trace()
 
-        """
-        epoch_time = time.time() - epoch_begin_time
-        epoch = len(log['epoch'].data) + 1
-        for k, v in log.items():
-            if k == 'epoch':
-                v.data.append(epoch)
-            else:
-                if k in stat and v.divide_by is not None and stat[v.divide_by] > 0:
-                    stat[k] = stat[k] / stat[v.divide_by]
-                 v.data.append(stat.get(k, 0))
-        """
+    # 2. Train QBN
+
+    # 3. Insert QBN
+
+    # 4. Fine-tune Network
+
+    # 5. Minimization or Functional Pruning
+
 
 def save(path):
     d = dict()
