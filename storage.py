@@ -26,14 +26,17 @@ class Storage():
                 self.h_t1_batch[self.idx] = rollouts[step]['h_t1'][agent_idx]
                 self.idx += 1
 
-    def fetch_train_data(self, batch_size):
-        sampler = BatchSampler(SubsetRandomSampler(range(self.storage_size)),
-                               batch_size,
-                               drop_last=True)
-        for indices in sampler:
-            h_t_batch = torch.FloatTensor(self.h_t_batch[indices]).to(self.device)
-            o_t_batch = torch.FloatTensor(self.o_t_batch[indices]).to(self.device)
-            c_t_batch = torch.FloatTensor(self.c_t_batch[indices]).to(self.device)
-            a_t_batch = torch.FloatTensor(self.a_t_batch[indices]).to(self.device)
-            h_t1_batch = torch.FloatTensor(self.h_t1_batch[indices]).to(self.device)
-            yield h_t_batch, o_t_batch, c_t_batch, a_t_batch, h_t1_batch
+    def __len__(self):
+        return self.idx
+
+    def fetch_obs_data(self, indices):
+        o_t_batch = torch.FloatTensor(self.o_t_batch[indices]).to(self.device)
+        return o_t_batch
+
+    def fetch_comm_data(self, indices):
+        c_t_batch = torch.FloatTensor(self.c_t_batch[indices]).to(self.device)
+        return c_t_batch
+
+    def fetch_hidden_data(self, indices):
+        h_t_batch = torch.FloatTensor(self.h_t_batch[indices]).to(self.device)
+        return h_t_batch

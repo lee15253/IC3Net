@@ -222,8 +222,6 @@ class Trainer(object):
             stat['entropy'] = entropy.item()
             if self.args.entr > 0:
                 loss -= self.args.entr * entropy
-
-
         loss.backward()
 
         return stat

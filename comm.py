@@ -5,11 +5,13 @@ from torch import nn
 from models import MLP
 from action_utils import select_action, translate_action
 
+
 class CommNetMLP(nn.Module):
     """
     MLP based CommNet. Uses communication vector to communicate info
     between agents
     """
+
     def __init__(self, args, num_inputs):
         """Initialization method for this class, setup various internal networks
         and weights
@@ -41,8 +43,7 @@ class CommNetMLP(nn.Module):
             self.comm_mask = torch.zeros(self.nagents, self.nagents)
         else:
             self.comm_mask = torch.ones(self.nagents, self.nagents) \
-                            - torch.eye(self.nagents, self.nagents)
-
+                             - torch.eye(self.nagents, self.nagents)
 
         # Since linear layers in PyTorch now accept * as any number of dimensions
         # between last and first dim, num_agents dimension will be covered.
@@ -69,7 +70,7 @@ class CommNetMLP(nn.Module):
                 self.f_modules = nn.ModuleList([nn.Linear(args.hid_size, args.hid_size)
                                                 for _ in range(self.comm_passes)])
         # else:
-            # raise RuntimeError("Unsupported RNN type.")
+        # raise RuntimeError("Unsupported RNN type.")
 
         # Our main function for converting current hidden state to next state
         # self.f = nn.Linear(args.hid_size, args.hid_size)
@@ -94,7 +95,6 @@ class CommNetMLP(nn.Module):
         # self.apply(self.init_weights)
 
         self.value_head = nn.Linear(self.hid_size, 1)
-
 
     def get_agent_mask(self, batch_size, info):
         n = self.nagents
@@ -130,8 +130,7 @@ class CommNetMLP(nn.Module):
 
         return x, hidden_state, cell_state
 
-
-    def forward(self, x, info={}):
+    def forward(self, x, info={}, obs_qb_net=None, comm_qb_net=None, hidden_qb_net=None):
         # TODO: Update dimensions
         """Forward function for CommNet class, expects state, previous hidden
         and communication tensor.
@@ -210,17 +209,24 @@ class CommNetMLP(nn.Module):
                     o_t = x.clone()
                     c_t = c.clone()
                     h_t = hidden_state.clone()
+
+                    if obs_qb_net:
+                        x = obs_qb_net(x)
+                    if comm_qb_net:
+                        c = comm_qb_net(x)
+
                 # skip connection - combine comm. matrix and encoded input for all agents
                 inp = x + c
 
                 inp = inp.view(batch_size * n, self.hid_size)
 
                 output = self.f_module(inp, (hidden_state, cell_state))
-
                 hidden_state = output[0]
                 cell_state = output[1]
+                if hidden_qb_net:
+                    hidden_state = hidden_qb_net(hidden_state)
 
-            else: # MLP|RNN
+            else:  # MLP|RNN
                 # Get next hidden state from f node
                 # and Add skip connection from start and sum them
                 hidden_state = sum([x, self.f_modules[i](hidden_state), c])
@@ -246,11 +252,11 @@ class CommNetMLP(nn.Module):
                 h_t1 = hidden_state.clone()
                 # TODO: it works in predator-pery but not sure whether other environments have only one action-head
                 a_t = action[0].clone()
-                latent = {'h_t':h_t,
-                          'o_t':o_t.squeeze(),
-                          'c_t':c_t.squeeze(),
-                          'a_t':a_t.squeeze(),
-                          'h_t1':h_t1}
+                latent = {'h_t': h_t,
+                          'o_t': o_t.squeeze(),
+                          'c_t': c_t.squeeze(),
+                          'a_t': a_t.squeeze(),
+                          'h_t1': h_t1}
                 return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
             else:
                 return action, value_head, (hidden_state.clone(), cell_state.clone())
@@ -263,6 +269,5 @@ class CommNetMLP(nn.Module):
 
     def init_hidden(self, batch_size):
         # dim 0 = num of layers * num of direction
-        return tuple(( torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True),
-                       torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True)))
-
+        return tuple((torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True),
+                      torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True)))
