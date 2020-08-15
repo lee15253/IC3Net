@@ -1,8 +1,96 @@
 import torch
 import torch.autograd as autograd
-from torch.autograd import Variable
+from torch.autograd import Variable, Function
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+class TernarizeTanhF(Function):
+    @staticmethod
+    def forward(cxt, input):
+        output = input.new(input.size())
+        output.data = input.data
+        output.round_()
+        return output
+
+    @staticmethod
+    def backward(cxt, grad_output):
+        grad_input = grad_output.clone()
+        return grad_input
+
+
+class TernaryTanh(nn.Module):
+    """
+    reference: https://r2rt.com/beyond-binary-ternary-and-one-hot-neurons.html
+    """
+    def __init__(self):
+        super(TernaryTanh, self).__init__()
+
+    def forward(self, input):
+        output = 1.5 * F.tanh(input) + 0.5 * F.tanh(-3 * input)
+        output = TernarizeTanhF.apply(output)
+        return output
+
+
+class ObsQBNet(nn.Module):
+    """
+    Quantized Bottleneck Network(QBN) for observation & communication features.
+    """
+    def __init__(self, input_size, x_features):
+        super(ObsQBNet, self).__init__()
+        self.bhx_size = x_features
+        f1 = int(8 * x_features)
+        self.encoder = nn.Sequential(nn.Linear(input_size, f1),
+                                     nn.Tanh(),
+                                     nn.Linear(f1, x_features),
+                                     TernaryTanh())
+        self.decoder = nn.Sequential(nn.Linear(x_features, f1),
+                                     nn.Tanh(),
+                                     nn.Linear(f1, input_size),
+                                     nn.ReLU6())
+
+    def forward(self, x):
+        encoded = self.encode(x)
+        decoded = self.decode(encoded)
+        return decoded, encoded
+
+    def encode(self, x):
+        return self.encoder(x)
+
+    def decode(self, x):
+        return self.decoder(x)
+
+
+class HxQBNet(nn.Module):
+    """
+    Quantized Bottleneck Network(QBN) for hidden states of GRU
+    """
+    def __init__(self, input_size, x_features):
+        super(HxQBNet, self).__init__()
+        self.bhx_size = x_features
+        f1, f2 = int(8 * x_features), int(4 * x_features)
+        self.encoder = nn.Sequential(nn.Linear(input_size, f1),
+                                     nn.Tanh(),
+                                     nn.Linear(f1, f2),
+                                     nn.Tanh(),
+                                     nn.Linear(f2, x_features),
+                                     TernaryTanh())
+        self.decoder = nn.Sequential(nn.Linear(x_features, f2),
+                                     nn.Tanh(),
+                                     nn.Linear(f2, f1),
+                                     nn.Tanh(),
+                                     nn.Linear(f1, input_size),
+                                     nn.Tanh())
+
+    def forward(self, x):
+        x = self.encode(x)
+        return self.decode(x), x
+
+    def encode(self, x):
+        return self.encoder(x)
+
+    def decode(self, x):
+        return self.decoder(x)
 
 
 class MLP(nn.Module):

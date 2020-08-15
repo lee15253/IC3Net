@@ -35,8 +35,16 @@ parser.add_argument('--hid_size', default=64, type=int,
                     help='hidden layer size')
 parser.add_argument('--recurrent', action='store_true', default=False,
                     help='make the model recurrent in time')
+
+# QBN
 parser.add_argument('--qbn', action='store_true', default=False,
                     help='use quantized bottle-neck architecture')
+parser.add_argument('--obs_quantize_size', default=16, type=int,
+                    help='hidden bottle neck size for observation')
+parser.add_argument('--comm_quantize_size', default=16, type=int,
+                    help='hidden bottle neck size for communication')
+parser.add_argument('--hidden_quantize_size', default=16, type=int,
+                    help='hidden bottle neck size for hidden-states')
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
@@ -210,6 +218,7 @@ def run():
                       n_agents=args.nagents,
                       hid_size=args.hid_size,
                       num_actions=args.num_actions[0])
+    # TODO: perform nosiy rollouts?
     for n in range(args.num_batch_steps):
         batch, s = trainer.run_batch(epoch=n) # size of the batch is args.batch_size
         merge_stat(s, stat)
@@ -217,6 +226,9 @@ def run():
         storage.store(rollouts=latent_batch)
 
     # 2. Train & Insert QBN (check the performance iteratively)
+    #obs_qb_net = ObsQBNet(input_size=args.hid_size, )
+
+
 
     # 3. Fine-tune Network
 
