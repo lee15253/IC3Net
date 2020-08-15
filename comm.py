@@ -247,9 +247,9 @@ class CommNetMLP(nn.Module):
                 # TODO: it works in predator-pery but not sure whether other environments have only one action-head
                 a_t = action[0].clone()
                 latent = {'h_t':h_t,
-                          'o_t':o_t,
-                          'c_t':c_t,
-                          'a_t':a_t,
+                          'o_t':o_t.squeeze(),
+                          'c_t':c_t.squeeze(),
+                          'a_t':a_t.squeeze(),
                           'h_t1':h_t1}
                 return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
             else:

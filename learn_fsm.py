@@ -12,8 +12,8 @@ from models import *
 from comm import CommNetMLP
 from utils import *
 from action_utils import parse_action_args
+from storage import Storage
 from trainer import Trainer
-from multi_processing import MultiProcessTrainer
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -25,10 +25,11 @@ parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 # note: number of steps = num_batch_steps x nprocesses
 parser.add_argument('--num_batch_steps', type=int, default=10,
                     help='number of batch-steps to collect trajectory')
-parser.add_argument('--batch_size', type=int, default=5,
+parser.add_argument('--batch_size', type=int, default=128,
                     help='number of steps to check collection time')
-parser.add_argument('--nprocesses', type=int, default=16,
-                    help='How many processes to run')
+parser.add_argument('--storage_size', type=int, default=50000,
+                    help='size of storage to store the trajectory')
+
 # model
 parser.add_argument('--hid_size', default=64, type=int,
                     help='hidden layer size')
@@ -74,8 +75,6 @@ parser.add_argument('--load', default='', type=str,
                     help='load the model')
 parser.add_argument('--display', action="store_true", default=False,
                     help='Display environment state')
-
-
 parser.add_argument('--random', action='store_true', default=False,
                     help="enable random model")
 
@@ -179,10 +178,8 @@ if not args.display:
 for p in policy_net.parameters():
     p.data.share_memory_()
 
-if args.nprocesses > 1:
-    trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
-else:
-    trainer = Trainer(args, policy_net, data.init(args.env_name, args))
+# num-process is always 1
+trainer = Trainer(args, policy_net, data.init(args.env_name, args))
 
 disp_trainer = Trainer(args, policy_net, data.init(args.env_name, args, False))
 disp_trainer.display = True
@@ -209,19 +206,21 @@ def run():
     begin_time = time.time()
     stat = dict()
     # 1. Collect Trajectory from the trained recurrent Model
+    storage = Storage(storage_size=args.storage_size,
+                      n_agents=args.nagents,
+                      hid_size=args.hid_size,
+                      num_actions=args.num_actions[0])
     for n in range(args.num_batch_steps):
         batch, s = trainer.run_batch(epoch=n) # size of the batch is args.batch_size
         merge_stat(s, stat)
-        import pdb
-        pdb.set_trace()
+        latent_batch = batch[-1]
+        storage.store(rollouts=latent_batch)
 
-    # 2. Train QBN
+    # 2. Train & Insert QBN (check the performance iteratively)
 
-    # 3. Insert QBN
+    # 3. Fine-tune Network
 
-    # 4. Fine-tune Network
-
-    # 5. Minimization or Functional Pruning
+    # 4. Minimization or Functional Pruning
 
 
 def save(path):
