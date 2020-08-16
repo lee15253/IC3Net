@@ -240,9 +240,7 @@ def run():
     qbn_trainer = QBNTrainer(policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage)
 
     # 3. Train & Insert QBN (check the performance iteratively)
-    qbn_trainer.train_obs_qb_net(batch_size=args.batch_size, epochs=args.epochs)
-    qbn_trainer.train_comm_qb_net(batch_size=args.batch_size, epochs=args.epochs)
-    qbn_trainer.train_hidden_qb_net(batch_size=args.batch_size, epochs=args.epochs)
+    qbn_trainer.train_all(batch_size=args.batch_size, epochs=args.epochs)
     qbn_trainer.test_all()
 
     # 4. Fine-tune Network
