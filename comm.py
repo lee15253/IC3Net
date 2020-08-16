@@ -171,7 +171,7 @@ class CommNetMLP(nn.Module):
             comm_action = torch.tensor(info['comm_action'])
             comm_action_mask = comm_action.expand(batch_size, n, n).unsqueeze(-1)
             # action 1 is talk, 0 is silent i.e. act as dead for comm purposes.
-            agent_mask *= comm_action_mask.double()
+            agent_mask = agent_mask * comm_action_mask.double()
 
         agent_mask_transpose = agent_mask.transpose(1, 2)
 

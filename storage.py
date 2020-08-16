@@ -31,11 +31,11 @@ class Storage():
 
     def fetch_train_data(self, indices, net_type='ob'):
         if net_type == 'ob':
-            data = torch.FloatTensor(self.o_t_batch[indices]).to(self.device)
+            data = self.o_t_batch[indices].to(self.device).detach()
         elif net_type == 'comm':
-            data = torch.FloatTensor(self.c_t_batch[indices]).to(self.device)
+            data = self.c_t_batch[indices].to(self.device).detach()
         elif net_type == 'hidden':
-            data = torch.FloatTensor(self.h_t_batch[indices]).to(self.device)
+            data = self.h_t_batch[indices].to(self.device).detach()
         else:
             raise NotImplementedError
         return data

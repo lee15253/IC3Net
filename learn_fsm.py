@@ -24,13 +24,13 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 # training
 # note: number of steps = num_batch_steps x nprocesses
-parser.add_argument('--num_batch_steps', type=int, default=10,
+parser.add_argument('--num_batch_steps', type=int, default=100,
                     help='number of batch-steps to collect trajectory')
 parser.add_argument('--batch_size', type=int, default=128,
                     help='number of steps to check collection time')
 parser.add_argument('--storage_size', type=int, default=50000,
                     help='size of storage to store the trajectory')
-parser.add_argument('--noisy_rolllouts', action='store_true', default=False,
+parser.add_argument('--noisy_rollouts', action='store_true', default=False,
                     help='perform noisy rollouts to get data diversity in training')
 parser.add_argument('--epochs', type=int, default=10,
                     help='number of epochs to train the quantized bottleneck network')
@@ -224,7 +224,7 @@ def run():
                       hid_size=args.hid_size,
                       num_actions=args.num_actions[0])
     for n in range(args.num_batch_steps):
-        if args.noisy:
+        if args.noisy_rollouts:
             # TODO: implement noisy rollouts
             raise NotImplementedError
         else:
@@ -232,12 +232,11 @@ def run():
         merge_stat(s, stat)
         latent_batch = batch[-1]
         storage.store(rollouts=latent_batch)
-
     # 2. Initialize QBN model
     obs_qb_net = ObsQBNet(input_size=args.hid_size, x_features=args.obs_quantize_size)
     comm_qb_net = ObsQBNet(input_size=args.hid_size, x_features=args.comm_quantize_size)
     hidden_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.hidden_quantize_size)
-    qbn_trainer = QBNTrainer(policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage)
+    qbn_trainer = QBNTrainer(policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, os.path.dirname(args.load))
 
     # 3. Train & Insert QBN (check the performance iteratively)
     qbn_trainer.train_all(batch_size=args.batch_size, epochs=args.epochs)
