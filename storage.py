@@ -24,7 +24,7 @@ class Storage():
                 self.c_t_batch[self.idx] = rollouts[step]['c_t'][agent_idx]
                 self.a_t_batch[self.idx] = rollouts[step]['a_t'][agent_idx]
                 self.h_t1_batch[self.idx] = rollouts[step]['h_t1'][agent_idx]
-                self.idx += 1
+                self.idx = (self.idx + 1) % self.storage_size
 
     def __len__(self):
         return self.idx

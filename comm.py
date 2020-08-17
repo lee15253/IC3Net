@@ -209,11 +209,10 @@ class CommNetMLP(nn.Module):
                     o_t = x.clone()
                     c_t = c.clone()
                     h_t = hidden_state.clone()
-
                     if obs_qb_net:
-                        x = obs_qb_net(x)
+                        x, _ = obs_qb_net(x)
                     if comm_qb_net:
-                        c = comm_qb_net(x)
+                        c, _ = comm_qb_net(c)
 
                 # skip connection - combine comm. matrix and encoded input for all agents
                 inp = x + c
@@ -224,7 +223,7 @@ class CommNetMLP(nn.Module):
                 hidden_state = output[0]
                 cell_state = output[1]
                 if hidden_qb_net:
-                    hidden_state = hidden_qb_net(hidden_state)
+                    hidden_state, _ = hidden_qb_net(hidden_state)
 
             else:  # MLP|RNN
                 # Get next hidden state from f node
