@@ -26,13 +26,19 @@ class QBNTrainer():
         self.train_qb_net(self.hidden_qb_net, net_type='hidden', verbose=verbose)
 
     def test_all(self):
-        # TODO: test performance when every network is repalced?
-        pass
+        self.obs_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/ob.pth'))
+        self.comm_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/comm.pth'))
+        self.hidden_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/hidden.pth'))
+        self.perform_rollouts(self.args.num_test_rollout_steps, net_type='Quantized', epoch=0,
+                              obs_qb_net=self.obs_qb_net, comm_qb_net=self.comm_qb_net, hidden_qb_net=self.hidden_qb_net)
 
     def train_qb_net(self, qb_net, net_type='ob', verbose=True, val_ratio=0.1):
+        best_perf = -float('inf')
+        model_path = self.writer.log_dir + '/' + net_type + '.pth'
+
         mse_loss = nn.MSELoss().cuda()
-        min_loss, best_perf = None, None
         optimizer = torch.optim.Adam(qb_net.parameters(), lr=1e-5, weight_decay=0)
+
         indices = np.arange(len(self.storage))
         np.random.shuffle(indices)
         split = int(np.floor(val_ratio * len(self.storage)))
@@ -40,9 +46,9 @@ class QBNTrainer():
         val_sampler = BatchSampler(SubsetRandomSampler(indices[:split]), self.args.batch_size, drop_last=False)
 
         for epoch in range(self.args.epochs):
-            qb_net.to(self.storage.device)
-            # Validation
             train_losses, val_losses = [], []
+            # Train
+            qb_net.to(self.storage.device)
             qb_net.train()
             for train_batch_indices in train_sampler:
                 input = self.storage.fetch_train_data(train_batch_indices, net_type)
@@ -67,25 +73,23 @@ class QBNTrainer():
                     val_losses.append(loss.item())
                 self.writer.add_scalar(net_type + '/val_loss', np.mean(val_losses), epoch)
 
-            # TODO: Test with environment
+            qb_net_dict = {'obs_qb_net':None, 'comm_qb_net':None, 'hidden_qb_net':None}
             if net_type == 'ob':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      obs_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
-            elif net_type =='comm':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      comm_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
-            elif net_type =='hidden':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      hidden_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
+                qb_net_dict['obs_qb_net'] = qb_net.to('cpu')
+            elif net_type == 'comm':
+                qb_net_dict['comm_qb_net'] = qb_net.to('cpu')
+            elif net_type == 'hidden':
+                qb_net_dict['hidden_qb_net'] = qb_net.to('cpu')
+            avg_rewards = self.perform_rollouts(self.args.num_test_rollout_steps,
+                                                net_type=net_type,
+                                                epoch=epoch,
+                                                **qb_net_dict)
+            if avg_rewards > best_perf:
+                torch.save(qb_net.state_dict(), model_path)
+                best_perf = avg_rewards
 
     def perform_rollouts(self, num_rollout_steps, net_type='policy', store=False, epoch=0,
-                         obs_qb_net=None, comm_qb_net=None, hidden_qb_net=None):
+                         obs_qb_net=None, comm_qb_net=None, hidden_qb_net=None, **kwargs):
         batch = []
         stats = dict()
         stats['num_episodes'] = 0
@@ -101,8 +105,10 @@ class QBNTrainer():
         stats['num_steps'] = len(batch)
         if store:
             self.storage.store(rollouts=batch)
-        self.writer.add_scalar(net_type + '/avg_rewards', np.mean(stats['reward']) / stats['num_episodes'], epoch)
+        avg_rewards = np.mean(stats['reward']) / stats['num_episodes']
+        self.writer.add_scalar(net_type + '/avg_rewards', avg_rewards, epoch)
         self.writer.add_scalar(net_type + '/success_rate', stats['success'] / stats['num_episodes'], epoch)
+        return avg_rewards
 
     def get_episode(self, obs_qb_net, comm_qb_net, hidden_qb_net):
         episode = []
@@ -181,7 +187,6 @@ class QBNTrainer():
         if hasattr(self.env, 'get_stat'):
             merge_stat(self.env.get_stat(), stat)
         return episode, stat
-
 
     def finetune(self):
         pass

@@ -29,7 +29,7 @@ parser.add_argument('--dest', type=str, default='',
                     help='destination for the training logs to be saved')
 parser.add_argument('--num_train_rollout_steps', type=int, default=30000,
                     help='number of steps to collect trajectory for training')
-parser.add_argument('--num_test_rollout_steps', type=int, default=3000,
+parser.add_argument('--num_test_rollout_steps', type=int, default=5000,
                      help='number of steps to collect trajectory for testing')
 parser.add_argument('--storage_size', type=int, default=100000,
                     help='size of storage to store the trajectory')
@@ -37,7 +37,7 @@ parser.add_argument('--noisy_rollouts', action='store_true', default=False,
                     help='perform noisy rollouts to get data diversity in training')
 parser.add_argument('--batch_size', type=int, default=128,
                     help='number of batch size to train the quanitzed bottleneck network')
-parser.add_argument('--epochs', type=int, default=30,
+parser.add_argument('--epochs', type=int, default=40,
                     help='number of epochs to train the quantized bottleneck network')
 
 # model

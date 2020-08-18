@@ -34,7 +34,7 @@ class TernaryTanh(nn.Module):
 
 class ObsQBNet(nn.Module):
     """
-    Quantized Bottleneck Network(QBN) for observation & communication features.
+    Quantized Bottleneck Network(QBN) for observation & communication features (2-layer architecture)
     """
     def __init__(self, input_size, x_features):
         super(ObsQBNet, self).__init__()
@@ -63,7 +63,7 @@ class ObsQBNet(nn.Module):
 
 class HxQBNet(nn.Module):
     """
-    Quantized Bottleneck Network(QBN) for hidden states of GRU
+    Quantized Bottleneck Network(QBN) for hidden states of GRU (3-layer architecture)
     """
     def __init__(self, input_size, x_features):
         super(HxQBNet, self).__init__()
