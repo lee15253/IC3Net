@@ -12,8 +12,10 @@ from models import *
 from comm import CommNetMLP
 from utils import *
 from action_utils import parse_action_args
+from storage import Storage
 from trainer import Trainer
-from multi_processing import MultiProcessTrainer
+from qbn_trainer import QBNTrainer
+from torch.utils.tensorboard import SummaryWriter
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -22,20 +24,37 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 
 parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 # training
-# note: number of steps = num_batch_steps x nprocesses
-parser.add_argument('--num_batch_steps', type=int, default=10,
-                    help='number of batch-steps to collect trajectory')
-parser.add_argument('--batch_size', type=int, default=5,
-                    help='number of steps to check collection time')
-parser.add_argument('--nprocesses', type=int, default=16,
-                    help='How many processes to run')
+# note: number of steps = num_rollout_steps x n_agents
+parser.add_argument('--dest', type=str, default='',
+                    help='destination for the training logs to be saved')
+parser.add_argument('--num_train_rollout_steps', type=int, default=30000,
+                    help='number of steps to collect trajectory for training')
+parser.add_argument('--num_test_rollout_steps', type=int, default=3000,
+                     help='number of steps to collect trajectory for testing')
+parser.add_argument('--storage_size', type=int, default=100000,
+                    help='size of storage to store the trajectory')
+parser.add_argument('--noisy_rollouts', action='store_true', default=False,
+                    help='perform noisy rollouts to get data diversity in training')
+parser.add_argument('--batch_size', type=int, default=128,
+                    help='number of batch size to train the quanitzed bottleneck network')
+parser.add_argument('--epochs', type=int, default=30,
+                    help='number of epochs to train the quantized bottleneck network')
+
 # model
 parser.add_argument('--hid_size', default=64, type=int,
                     help='hidden layer size')
 parser.add_argument('--recurrent', action='store_true', default=False,
                     help='make the model recurrent in time')
+
+# QBN
 parser.add_argument('--qbn', action='store_true', default=False,
                     help='use quantized bottle-neck architecture')
+parser.add_argument('--obs_quantize_size', default=32, type=int,
+                    help='hidden bottle neck size for observation')
+parser.add_argument('--comm_quantize_size', default=32, type=int,
+                    help='hidden bottle neck size for communication')
+parser.add_argument('--hidden_quantize_size', default=32, type=int,
+                    help='hidden bottle neck size for hidden-states')
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
@@ -74,8 +93,6 @@ parser.add_argument('--load', default='', type=str,
                     help='load the model')
 parser.add_argument('--display', action="store_true", default=False,
                     help='Display environment state')
-
-
 parser.add_argument('--random', action='store_true', default=False,
                     help="enable random model")
 
@@ -179,10 +196,8 @@ if not args.display:
 for p in policy_net.parameters():
     p.data.share_memory_()
 
-if args.nprocesses > 1:
-    trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
-else:
-    trainer = Trainer(args, policy_net, data.init(args.env_name, args))
+# num-process is always 1
+trainer = Trainer(args, policy_net, data.init(args.env_name, args))
 
 disp_trainer = Trainer(args, policy_net, data.init(args.env_name, args, False))
 disp_trainer.display = True
@@ -208,20 +223,38 @@ if args.plot:
 def run():
     begin_time = time.time()
     stat = dict()
-    # 1. Collect Trajectory from the trained recurrent Model
-    for n in range(args.num_batch_steps):
-        batch, s = trainer.run_batch(epoch=n) # size of the batch is args.batch_size
-        merge_stat(s, stat)
-        import pdb
-        pdb.set_trace()
 
-    # 2. Train QBN
+    # 1. Initialize QBN model
+    print('Initialize QBN Model')
+    obs_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.obs_quantize_size)
+    comm_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.comm_quantize_size)
+    hidden_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.hidden_quantize_size)
 
-    # 3. Insert QBN
+    # 2. Initialize QBN trainer
+    print('Initialize QBN Trainer')
+    storage = Storage(storage_size=args.storage_size,
+                      n_agents=args.nagents,
+                      hid_size=args.hid_size,
+                      num_actions=args.num_actions[0])
+    writer = SummaryWriter(os.path.dirname(args.load) + '/' + args.dest)
+    env = data.init(args.env_name, args)
+    qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
 
-    # 4. Fine-tune Network
+    # 3. Collect Trajectory from the trained model
+    print('Collect trajectory from the trained model')
+    qbn_trainer.perform_rollouts(args.num_train_rollout_steps, store=True)
 
-    # 5. Minimization or Functional Pruning
+    # 4. Train & Insert QBN (check the performance iteratively)
+    print('Train QBN model')
+    qbn_trainer.train_all()
+    qbn_trainer.test_all()
+
+    # 5. Fine-tune Network
+
+
+    # 6. Minimization or Functional Pruning
+
+
 
 
 def save(path):
