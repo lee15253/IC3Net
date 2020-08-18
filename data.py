@@ -2,7 +2,6 @@ import sys
 import gym
 import ic3net_envs
 from env_wrappers import *
-import ipdb
 
 def init(env_name, args, final_init=True):
     if env_name == 'levers':

@@ -24,7 +24,7 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 
 parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 # training
-# note: number of steps = num_rollout_steps x n_agents
+# note: number of rollout-steps = num_rollout_steps x n_agents
 parser.add_argument('--dest', type=str, default='',
                     help='destination for the training logs to be saved')
 parser.add_argument('--num_train_rollout_steps', type=int, default=30000,
@@ -37,8 +37,10 @@ parser.add_argument('--noisy_rollouts', action='store_true', default=False,
                     help='perform noisy rollouts to get data diversity in training')
 parser.add_argument('--batch_size', type=int, default=128,
                     help='number of batch size to train the quanitzed bottleneck network')
-parser.add_argument('--epochs', type=int, default=40,
+parser.add_argument('--qbn_epochs', type=int, default=30,
                     help='number of epochs to train the quantized bottleneck network')
+parser.add_argument('--finetune_epochs', type=int, default=30,
+                    help='number of epochs to fine-tune the moore machine network')
 
 # model
 parser.add_argument('--hid_size', default=64, type=int,
@@ -222,7 +224,6 @@ if args.plot:
 
 def run():
     begin_time = time.time()
-    stat = dict()
 
     # 1. Initialize QBN model
     print('Initialize QBN Model')
@@ -232,29 +233,29 @@ def run():
 
     # 2. Initialize QBN trainer
     print('Initialize QBN Trainer')
+    env = data.init(args.env_name, args)
     storage = Storage(storage_size=args.storage_size,
                       n_agents=args.nagents,
+                      observation_dim=env.observation_dim,
                       hid_size=args.hid_size,
                       num_actions=args.num_actions[0])
     writer = SummaryWriter(os.path.dirname(args.load) + '/' + args.dest)
-    env = data.init(args.env_name, args)
     qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
 
     # 3. Collect Trajectory from the trained model
     print('Collect trajectory from the trained model')
-    qbn_trainer.perform_rollouts(args.num_train_rollout_steps, store=True)
+    mm_net = MMNet(policy_net)
+    qbn_trainer.perform_rollouts(mm_net, args.num_train_rollout_steps, store=True)
 
     # 4. Train & Insert QBN (check the performance iteratively)
     print('Train QBN model')
-    qbn_trainer.train_all()
-    qbn_trainer.test_all()
+    #qbn_trainer.train_all()
 
     # 5. Fine-tune Network
-
+    print('Fine-tune QBN model')
+    qbn_trainer.finetune()
 
     # 6. Minimization or Functional Pruning
-
-
 
 
 def save(path):

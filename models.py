@@ -93,6 +93,21 @@ class HxQBNet(nn.Module):
         return self.decoder(x)
 
 
+class MMNet(nn.Module):
+    """
+    Moore Machine Network(MMN) which includes policy network & quantized network
+    """
+    def __init__(self, policy_net, obs_qb_net=None, comm_qb_net=None, hidden_qb_net=None):
+        super(MMNet, self).__init__()
+        self.policy_net = policy_net
+        self.obs_qb_net = obs_qb_net
+        self.comm_qb_net = comm_qb_net
+        self.hidden_qb_net = hidden_qb_net
+
+    def forward(self, x, info={}):
+        return self.policy_net(x, info, self.obs_qb_net, self.comm_qb_net, self.hidden_qb_net)
+
+
 class MLP(nn.Module):
     def __init__(self, args, num_inputs):
         super(MLP, self).__init__()
