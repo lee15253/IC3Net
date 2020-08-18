@@ -10,6 +10,7 @@ import time
 import sys
 from torch.autograd import Variable
 import ipdb
+import pdb
 
 LogField = namedtuple('LogField', ('data', 'plot', 'x_axis', 'divide_by'))
 
@@ -133,6 +134,7 @@ def init_args_for_env(parser):
 
     env = gym.make(env_dict[env_name])
     env.init_args(parser)
+    # pdb.set_trace()
 
 def display_models(list_models):
     print('='*100)

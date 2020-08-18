@@ -37,6 +37,9 @@ parser.add_argument('--hid_size', default=64, type=int,
                     help='hidden layer size')
 parser.add_argument('--recurrent', action='store_true', default=False,
                     help='make the model recurrent in time')
+parser.add_argument('--qbn', action='store_true', default=False,
+                    help='use quantized bottle-neck architecture')
+
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
                     help='discount factor')
@@ -109,7 +112,6 @@ parser.add_argument('--advantages_per_action', default=False, action='store_true
                     help='Whether to multipy log porb for each chosen action with advantages')
 parser.add_argument('--share_weights', default=False, action='store_true',
                     help='Share weights for hops')
-
 
 init_args_for_env(parser)
 args = parser.parse_args()
@@ -212,6 +214,7 @@ def run(num_epochs):
     for ep in range(num_epochs):
         epoch_begin_time = time.time()
         stat = dict()
+        # ipdb.set_trace()
         for n in range(args.epoch_size):
             if n == args.epoch_size - 1 and args.display:
                 trainer.display = True
@@ -219,7 +222,7 @@ def run(num_epochs):
             s = trainer.train_batch(ep)
             merge_stat(s, stat)
             trainer.display = False
-
+        # ipdb.set_trace()
         epoch_time = time.time() - epoch_begin_time
         epoch = len(log['epoch'].data) + 1
         for k, v in log.items():
@@ -288,6 +291,7 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+# ipdb.set_trace()
 if args.load != '':
     load(args.load)
 
