@@ -23,12 +23,14 @@ if __name__ == '__main__':
     # ipdb.set_trace()
     env_name = args.env
     qbn_sizes = str((args.qbn_sizes[0], args.qbn_sizes[1])).replace(" ", "")
-    model_path = "../results/Atari/" + env_name + "/gru_" + args.gru_size + "_hx_" + str(qbn_sizes) + "_bgru/model.p"
-    ipdb.set_trace()
+    model_path = "./results/atari/" + env_name + "/gru_" + args.gru_size + "_hx_" + str(qbn_sizes) + "_bgru/model.p"
+    # ipdb.set_trace()
+    # 일단 학습이 전부 다 끝난, minimize하기 직전 bgru_net이 있다고 생각
+    # TODO: 일반 obs, obs_x와 ternarize 직전 obs_x 두개를 같이 뺀다.
     saved_observations, saved_observations_x, saved_observations_tanh = gather_observations(
                         env_name, int(args.gru_size), args.qbn_sizes[0], args.qbn_sizes[1],
                         model_path, episodes=1, cuda=args.cuda, env_type=args.env_type, scratch=args.scratch)
-    ipdb.set_trace()
+    # ipdb.set_trace()
     
     if not os.path.exists('results/'):
         os.mkdir('results/')
@@ -42,6 +44,7 @@ if __name__ == '__main__':
         os.mkdir(os.path.join('results/', args.env_type, env_name, results_path))
     results_path = os.path.join('results/', args.env_type, env_name, results_path)
 
+    ipdb.set_trace()
     env = atari_wrapper(env_name)
     env.seed(args.env_seed)
     obs = env.reset()
@@ -58,8 +61,14 @@ if __name__ == '__main__':
         model.cuda()
     input_image = saved_observations[int(args.input_index)]
     baseline_image = saved_observations[int(args.baseline_index)]
+    # ii_f -> (quantize) -> ii_q -> ternarize -> ii_x -> (dequantize) -> ii_f'
     ii_f, ii_x, ii_q = model(input_image.cuda(), inspect=False)
     bi_f, bi_x, bi_q = model(baseline_image.cuda(), inspect=False)
-    attributions, unmasked_attributions = integrated_gradient(input_image, model, calculate_outputs_and_gradients_steps, ii_x, ii_q, steps=50, cuda=args.cuda, baseline=baseline_image, results_path=results_path, feed_tTanh=True, env_type=args.env_type)
+    # saliency 계산
+    attributions, unmasked_attributions = integrated_gradient(
+        input_image, model, calculate_outputs_and_gradients_steps, ii_x, ii_q, 
+        steps=50, cuda=args.cuda, baseline=baseline_image, results_path=results_path, 
+        feed_tTanh=True, env_type=args.env_type)
+    ipdb.set_trace()
     input_image_path = os.path.join("./inputs/", args.env, args.input_index + ".jpg")
     mask_diff_ig(attributions, unmasked_attributions, input_image, ii_x, bi_x, input_image_path, results_path)

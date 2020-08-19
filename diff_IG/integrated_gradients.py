@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import ipdb
 
 
 def integrated_gradient(inputs, model, predict_and_gradients, original_image_x, before_Ttanh_output, steps, cuda, baseline, results_path, feed_tTanh=True, feature_type='image', env_type='atari'):
@@ -12,19 +13,22 @@ def integrated_gradient(inputs, model, predict_and_gradients, original_image_x, 
     if env_type == 'atari':
         plot_inputs_together(results_path, scaled_inputs)
 
+    # (51,100,1,80,80) (input->baseline, 모든 quantized vector의 entry에 대해서, input image에 걸리는 gradient )
     grads = predict_and_gradients(scaled_inputs, model, original_image_x, before_Ttanh_output, cuda=cuda, feed_tTanh=feed_tTanh)
-    avg_grads = np.average(grads, axis=0)
+    avg_grads = np.average(grads, axis=0)  # (100,1,80,80). 50장 전체에 대해 평균냄.
     if feature_type == 'image':
-        avg_grads = np.transpose(avg_grads, (0, 2, 3, 1))
+        avg_grads = np.transpose(avg_grads, (0, 2, 3, 1))  # (100,80,80,1)
     integrated_grad = []
     for j in range(len(avg_grads)):
         if feature_type == 'image':
+            # quantize의 각 entry에 대해, input - baseline*avg_grads[that entry] 해줌 TODO: 뭔말임?
             integrated_grad.append((inputs.reshape(80, 80, 1) - baseline.reshape(80, 80, 1)).cpu().numpy() * avg_grads[j])
         elif feature_type == 'vector':
             integrated_grad.append(
                 (inputs.reshape(inputs.shape[1], inputs.shape[0]) - baseline.reshape(baseline.shape[1], baseline.shape[0])).cpu().numpy() * avg_grads[j].reshape(baseline.shape[1], baseline.shape[0]))
-    avg_intgrads = np.array(integrated_grad)
-    avg_grads = np.array(avg_grads)
+    ipdb.set_trace()
+    avg_intgrads = np.array(integrated_grad)  # (100, 80, 80, 1)
+    avg_grads = np.array(avg_grads)  # (100, 80, 80, 1)
     return avg_intgrads, avg_grads
 
 

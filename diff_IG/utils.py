@@ -12,6 +12,12 @@ import ipdb
 
 def calculate_outputs_and_gradients_steps(inputs, model, original_image_x, input_before_quantized, cuda=False, grad_clip=1, feed_tTanh=False):
     gradients = []
+    '''
+    input image -> (quantize) -> input_before_quantized(=ii_q) -> (ternarize) -> original_image_x(=ii_x) 
+    각 50장의 사진을 돌면서, input의 ii_q와 pixel별로 다 MSELoss를 측정하고, 50장 input image에 걸리는 gradient 측정
+    '''
+
+    # input image ~ baseline image의 straight line에 있는 image 50장을 돌면서
     for i in range(len(inputs)):
         bits_gradients = []
         input = torch.tensor(inputs[i], requires_grad=True)
@@ -19,10 +25,12 @@ def calculate_outputs_and_gradients_steps(inputs, model, original_image_x, input
             output_c, output_x, output_before_quantized = model(input.cuda())
         else:
             output_c, output_x, output_before_quantized = model(input)
+        # quantized obs_x 벡터의 모든 entry를 돌면서
         for j in range(len(output_x[0])):
             model.zero_grad()
             if feed_tTanh:
                 if cuda:
+                    # 그 linear 2끼리 비교한다. 여기서 할라고 빼놨구나
                     loss = nn.MSELoss()(output_before_quantized[0][j], input_before_quantized[0][j].cuda())
                 else:
                     loss = nn.MSELoss()(output_before_quantized[0][j], input_before_quantized[0][j])
@@ -33,7 +41,9 @@ def calculate_outputs_and_gradients_steps(inputs, model, original_image_x, input
             bits_gradients.append(gradient)
             input.grad.data.fill_(0)
         gradients.append(bits_gradients)
-    gradients = np.array(gradients)
+
+    ipdb.set_trace()
+    gradients = np.array(gradients)  # (51,100,1,80,80)
     assert gradients[0][0].shape == inputs[0][0].shape
     return gradients
 
