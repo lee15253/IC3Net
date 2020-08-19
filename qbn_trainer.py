@@ -6,8 +6,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler, BatchSampler
 from action_utils import *
+from models import *
 from utils import *
 
+Transition = namedtuple('Transition', ('state', 'action', 'action_out', 'value', 'episode_mask', 'episode_mini_mask',
+                                       'next_state','reward', 'misc', 'latent'))
 
 class QBNTrainer():
     def __init__(self, args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer):
@@ -25,24 +28,105 @@ class QBNTrainer():
         self.train_qb_net(self.comm_qb_net, net_type='comm', verbose=verbose)
         self.train_qb_net(self.hidden_qb_net, net_type='hidden', verbose=verbose)
 
-    def test_all(self):
-        # TODO: test performance when every network is repalced?
-        pass
+    def finetune(self, val_ratio=0.1):
+        # Load best-performing Quantized Model
+        self.obs_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/ob.pth'))
+        self.comm_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/comm.pth'))
+        self.hidden_qb_net.load_state_dict(torch.load(self.writer.log_dir + '/hidden.pth'))
 
-    def train_qb_net(self, qb_net, net_type='ob', verbose=True, val_ratio=0.1):
+        best_perf = -float('inf')
+        model_path = self.writer.log_dir + '/mmn.pth'
+        mm_net = MMNet(self.policy_net, self.obs_qb_net, self.comm_qb_net, self.hidden_qb_net)
+        # Loss function & Optimizer
         mse_loss = nn.MSELoss().cuda()
-        min_loss, best_perf = None, None
-        optimizer = torch.optim.Adam(qb_net.parameters(), lr=1e-5, weight_decay=0)
+        optimizer = torch.optim.Adam(mm_net.parameters(), lr=1e-4, weight_decay=0)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.qbn_epochs+1,
+                                                               eta_min=0, last_epoch=-1)
+        # Split Train / Validation
         indices = np.arange(len(self.storage))
         np.random.shuffle(indices)
         split = int(np.floor(val_ratio * len(self.storage)))
         train_sampler = BatchSampler(SubsetRandomSampler(indices[split:]), self.args.batch_size, drop_last=False)
         val_sampler = BatchSampler(SubsetRandomSampler(indices[:split]), self.args.batch_size, drop_last=False)
 
-        for epoch in range(self.args.epochs):
-            qb_net.to(self.storage.device)
-            # Validation
+        # Test initial performance
+        mm_net.to('cpu')
+        self.perform_rollouts(mm_net, self.args.num_test_rollout_steps, net_type='Quantized', epoch=0)
+        for epoch in range(self.args.finetune_epochs):
             train_losses, val_losses = [], []
+            # Train
+            mm_net.train()
+            for train_batch_indices in train_sampler:
+                mm_net.to('cpu')
+                optimizer.zero_grad()
+                for train_index in train_batch_indices:
+                    (x_t, cell_t, h_t, a_t, info_t) \
+                        = self.storage.fetch_train_data(train_index, 'mm')
+                    x_t = [x_t.unsqueeze(0), (h_t, cell_t)]
+                    target_action, _, _, _ = mm_net(x_t, info_t)
+                    # a_t & target-action is the log-softmax logit
+                    loss = mse_loss(a_t, target_action[0].squeeze(0))
+                    loss.backward()
+                    train_losses.append(loss.item())
+
+                mm_net.to('cuda')
+                optimizer.step()
+                scheduler.step()
+            self.writer.add_scalar('Quantized/train_loss', np.mean(train_losses), epoch)
+
+            # Validation
+            mm_net.eval()
+            with torch.no_grad():
+                for val_batch_indices in val_sampler:
+                    mm_net.to('cpu')
+                    for val_index in val_batch_indices:
+                        (x_t, cell_t, h_t, a_t, info_t) \
+                            = self.storage.fetch_train_data(val_index, 'mm')
+                        x_t = [x_t.unsqueeze(0), (h_t, cell_t)]
+                        target_action, _, _, _ = mm_net(x_t, info_t)
+                        loss = mse_loss(a_t, target_action[0].squeeze(0))
+                        val_losses.append(loss.item())
+                self.writer.add_scalar('Quantized/val_loss', np.mean(val_losses), epoch)
+
+            # Performance Test
+            avg_rewards = self.perform_rollouts(mm_net, self.args.num_test_rollout_steps, net_type='Quantized', epoch=epoch+1)
+            if avg_rewards > best_perf:
+                torch.save(mm_net.state_dict(), model_path)
+                best_perf = avg_rewards
+
+
+    def train_qb_net(self, qb_net, net_type='ob', verbose=True, val_ratio=0.1):
+        best_perf = -float('inf')
+        model_path = self.writer.log_dir + '/' + net_type + '.pth'
+        # Loss function & Optimizer
+        mse_loss = nn.MSELoss().cuda()
+        optimizer = torch.optim.Adam(qb_net.parameters(), lr=1e-4, weight_decay=0)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.qbn_epochs+1,
+                                                               eta_min=0, last_epoch=-1)
+        # Split Train / Validation
+        indices = np.arange(len(self.storage))
+        np.random.shuffle(indices)
+        split = int(np.floor(val_ratio * len(self.storage)))
+        batch_size = self.args.batch_size // self.storage.n_agents
+        train_sampler = BatchSampler(SubsetRandomSampler(indices[split:]), batch_size, drop_last=False)
+        val_sampler = BatchSampler(SubsetRandomSampler(indices[:split]), batch_size, drop_last=False)
+
+        # Test initial performance
+        qb_net.eval()
+        if net_type == 'ob':
+            mm_net = MMNet(self.policy_net, obs_qb_net=qb_net.to('cpu'))
+        elif net_type == 'comm':
+            mm_net = MMNet(self.policy_net, comm_qb_net=qb_net.to('cpu'))
+        elif net_type == 'hidden':
+            mm_net = MMNet(self.policy_net, hidden_qb_net=qb_net.to('cpu'))
+        else:
+            raise NotImplementedError
+        self.perform_rollouts(mm_net, self.args.num_test_rollout_steps, net_type=net_type, epoch=0)
+
+        for epoch in range(self.args.qbn_epochs):
+            train_losses, val_losses = [], []
+            # Train
+            qb_net.to(self.storage.device)
             qb_net.train()
             for train_batch_indices in train_sampler:
                 input = self.storage.fetch_train_data(train_batch_indices, net_type)
@@ -53,6 +137,7 @@ class QBNTrainer():
                 loss = mse_loss(pred, target)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
                 train_losses.append(loss.item())
             self.writer.add_scalar(net_type + '/train_loss', np.mean(train_losses), epoch)
 
@@ -67,25 +152,22 @@ class QBNTrainer():
                     val_losses.append(loss.item())
                 self.writer.add_scalar(net_type + '/val_loss', np.mean(val_losses), epoch)
 
-            # TODO: Test with environment
+            # Test performance with rollouts
             if net_type == 'ob':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      obs_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
-            elif net_type =='comm':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      comm_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
-            elif net_type =='hidden':
-                self.perform_rollouts(self.args.num_test_rollout_steps,
-                                      net_type=net_type,
-                                      hidden_qb_net=qb_net.to('cpu'),
-                                      epoch=epoch)
+                mm_net = MMNet(self.policy_net, obs_qb_net=qb_net.to('cpu'))
+            elif net_type == 'comm':
+                mm_net = MMNet(self.policy_net, comm_qb_net=qb_net.to('cpu'))
+            elif net_type == 'hidden':
+                mm_net = MMNet(self.policy_net, hidden_qb_net=qb_net.to('cpu'))
+            else:
+                raise NotImplementedError
+            avg_rewards = self.perform_rollouts(mm_net, self.args.num_test_rollout_steps,
+                                                net_type=net_type, epoch=epoch+1)
+            if avg_rewards > best_perf:
+                torch.save(qb_net.state_dict(), model_path)
+                best_perf = avg_rewards
 
-    def perform_rollouts(self, num_rollout_steps, net_type='policy', store=False, epoch=0,
-                         obs_qb_net=None, comm_qb_net=None, hidden_qb_net=None):
+    def perform_rollouts(self, mm_net, num_rollout_steps, net_type='policy', store=False, epoch=0):
         batch = []
         stats = dict()
         stats['num_episodes'] = 0
@@ -94,17 +176,21 @@ class QBNTrainer():
                 # TODO: implement noisy rollouts
                 raise NotImplementedError
             else:
-                episode, episode_stat = self.get_episode(obs_qb_net, comm_qb_net, hidden_qb_net)
+                episode, episode_stat = self.get_episode(mm_net)
             merge_stat(episode_stat, stats)
             stats['num_episodes'] += 1
             batch += episode
         stats['num_steps'] = len(batch)
+        batch = Transition(*zip(*batch))
         if store:
-            self.storage.store(rollouts=batch)
-        self.writer.add_scalar(net_type + '/avg_rewards', np.mean(stats['reward']) / stats['num_episodes'], epoch)
+            latent = batch[-1]
+            self.storage.store(rollouts=latent)
+        avg_rewards = np.mean(stats['reward']) / stats['num_episodes']
+        self.writer.add_scalar(net_type + '/avg_rewards', avg_rewards, epoch)
         self.writer.add_scalar(net_type + '/success_rate', stats['success'] / stats['num_episodes'], epoch)
+        return avg_rewards
 
-    def get_episode(self, obs_qb_net, comm_qb_net, hidden_qb_net):
+    def get_episode(self, mm_net):
         episode = []
         stat = dict()
         info = dict()
@@ -118,10 +204,10 @@ class QBNTrainer():
 
             # recurrence over time
             if self.args.rnn_type == 'LSTM' and t == 0:
-                prev_hid = self.policy_net.init_hidden(batch_size=state.shape[0])
+                prev_hid = mm_net.policy_net.init_hidden(batch_size=state.shape[0])
 
             x = [state, prev_hid]
-            action_out, value, prev_hid, latent = self.policy_net(x, info, obs_qb_net, comm_qb_net, hidden_qb_net)
+            action_out, value, prev_hid, latent = mm_net(x, info)
 
             if (t + 1) % self.args.detach_gap == 0:
                 if self.args.rnn_type == 'LSTM':
@@ -162,7 +248,9 @@ class QBNTrainer():
             else:
                 if 'is_completed' in info:
                     episode_mini_mask = 1 - info['is_completed'].reshape(-1)
-            episode.append(latent)
+            trans = Transition(state, action, action_out, value, episode_mask, episode_mini_mask, next_state,
+                               reward, misc, latent)
+            episode.append(trans)
             state = next_state
             if done:
                 break
@@ -181,11 +269,3 @@ class QBNTrainer():
         if hasattr(self.env, 'get_stat'):
             merge_stat(self.env.get_stat(), stat)
         return episode, stat
-
-
-    def finetune(self):
-        pass
-
-
-
-

@@ -4,7 +4,7 @@ from torch import nn
 
 from models import MLP
 from action_utils import select_action, translate_action
-import ipdb
+import copy
 
 
 class CommNetMLP(nn.Module):
@@ -160,7 +160,13 @@ class CommNetMLP(nn.Module):
         #     x = torch.cat([x, maxi], dim=-1)
         #     x = self.tanh(x)
 
-        # ipdb.set_trace()
+        if self.args.qbn:
+            # To fine-tune Moore Machine Network
+            x_t = x[0].clone()
+            h_t = x[1][0].clone()
+            cell_t = x[1][1].clone()
+            info_t = copy.deepcopy(info)
+
         x, hidden_state, cell_state = self.forward_state_encoder(x)
 
         batch_size = x.size()[0]
@@ -208,9 +214,9 @@ class CommNetMLP(nn.Module):
 
             if self.args.recurrent:
                 if self.args.qbn:
+                    # For training QBN
                     o_t = x.clone()
                     c_t = c.clone()
-                    h_t = hidden_state.clone()
                     if obs_qb_net:
                         x, _ = obs_qb_net(x)
                     if comm_qb_net:
@@ -237,7 +243,6 @@ class CommNetMLP(nn.Module):
         # v = v.view(hidden_state.size(0), n, -1)
         value_head = self.value_head(hidden_state)
         h = hidden_state.view(batch_size, n, self.hid_size)
-        # ipdb.set_trace()
 
         if self.continuous:
             action_mean = self.action_mean(h)
@@ -254,7 +259,10 @@ class CommNetMLP(nn.Module):
                 h_t1 = hidden_state.clone()
                 # TODO: it works in predator-pery but not sure whether other environments have only one action-head
                 a_t = action[0].clone()
-                latent = {'h_t': h_t,
+                latent = {'x_t':x_t.squeeze(),
+                          'h_t':h_t,
+                          'cell_t':cell_t,
+                          'info_t':info_t,
                           'o_t': o_t.squeeze(),
                           'c_t': c_t.squeeze(),
                           'a_t': a_t.squeeze(),
