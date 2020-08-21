@@ -52,6 +52,8 @@ class QBNTrainer():
         # Test initial performance
         mm_net.to('cpu')
         self.perform_rollouts(mm_net, self.args.num_test_rollout_steps, net_type='Quantized', epoch=0)
+        torch.save(mm_net.state_dict(), model_path)
+
         for epoch in range(self.args.finetune_epochs):
             train_losses, val_losses = [], []
             # Train
@@ -182,6 +184,7 @@ class QBNTrainer():
             batch += episode
         stats['num_steps'] = len(batch)
         batch = Transition(*zip(*batch))
+        
         if store:
             latent = batch[-1]
             self.storage.store(rollouts=latent)

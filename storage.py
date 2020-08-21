@@ -1,16 +1,18 @@
 import torch
 from collections import deque
+import ipdb
 
 class Storage():
-    def __init__(self, storage_size, n_agents, observation_dim, hid_size, num_actions):
-        self.storage_size = storage_size
-        self.n_agents = n_agents
+    def __init__(self, args, observation_dim):
+        self.storage_size = args.storage_size
+        self.n_agents = args.nagents
         self.observation_dim = observation_dim
-        self.hid_size = hid_size
-        self.num_actions = num_actions
+        self.hid_size = args.hid_size
+        self.num_actions = args.num_actions[0]
         self.device = torch.device('cuda')
         self.idx = 0
-
+        self.FSM = args.generate_FSM
+        
         self.x_t_batch = torch.zeros(self.storage_size, self.n_agents, self.observation_dim)
         self.info_t_batch = deque([], maxlen=self.storage_size)
         self.cell_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
@@ -19,6 +21,15 @@ class Storage():
         self.c_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
         self.a_t_batch = torch.zeros(self.storage_size, self.n_agents, self.num_actions)
         self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
+
+        # BK: Used in generating FSM
+        if self.FSM:
+            self.q_x_size = args.obs_quantize_size
+            self.q_c_size = args.comm_quantize_size
+            self.q_h_size = args.hidden_quantize_size
+            self.q_x_batch = torch.zeros(self.storage_size, self.n_agents, self.q_x_size)
+            self.q_c_batch = torch.zeros(self.storage_size, self.n_agents, self.q_c_size)
+            self.q_h_batch = torch.zeros(self.storage_size, self.n_agents, self.q_h_size)
 
     def store(self, rollouts):
         for step in range(len(rollouts)):
@@ -30,6 +41,13 @@ class Storage():
                 self.c_t_batch[self.idx][agent_idx] = rollouts[step]['c_t'][agent_idx]
                 self.a_t_batch[self.idx][agent_idx] = rollouts[step]['a_t'][agent_idx]
                 self.h_t1_batch[self.idx][agent_idx] = rollouts[step]['h_t1'][agent_idx]
+
+                # BK: Used in generating FSM
+                if self.FSM:
+                    self.q_x_batch[self.idx][agent_idx] = rollouts[step]['q_x'][agent_idx]
+                    self.q_c_batch[self.idx][agent_idx] = rollouts[step]['q_c'][agent_idx]
+                    self.q_h_batch[self.idx][agent_idx] = rollouts[step]['q_h'][agent_idx]
+
             self.info_t_batch.append(rollouts[step]['info_t'])
             self.idx = (self.idx + 1) % self.storage_size
 
@@ -53,3 +71,11 @@ class Storage():
         else:
             raise NotImplementedError
         return data
+
+    # BK: Used in generating FSM
+    def fetch_fsm_data(self):
+        # agent 1's quantized_(obs,comm,hidden)
+        q_x_batch = self.q_x_batch[:self.idx,0,:]
+        q_c_batch = self.q_c_batch[:self.idx,0,:]
+        q_h_batch = self.q_h_batch[:self.idx,0,:]
+        return (q_x_batch, q_c_batch, q_h_batch)

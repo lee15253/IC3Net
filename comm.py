@@ -5,6 +5,7 @@ from torch import nn
 from models import MLP
 from action_utils import select_action, translate_action
 import copy
+import ipdb
 
 
 class CommNetMLP(nn.Module):
@@ -218,9 +219,9 @@ class CommNetMLP(nn.Module):
                     o_t = x.clone()
                     c_t = c.clone()
                     if obs_qb_net:
-                        x, _ = obs_qb_net(x)
+                        x, q_x = obs_qb_net(x)
                     if comm_qb_net:
-                        c, _ = comm_qb_net(c)
+                        c, q_c = comm_qb_net(c)
 
                 # skip connection - combine comm. matrix and encoded input for all agents
                 inp = x + c
@@ -231,7 +232,7 @@ class CommNetMLP(nn.Module):
                 hidden_state = output[0]
                 cell_state = output[1]
                 if hidden_qb_net:
-                    hidden_state, _ = hidden_qb_net(hidden_state)
+                    hidden_state, q_h = hidden_qb_net(hidden_state)
 
             else:  # MLP|RNN
                 # Get next hidden state from f node
@@ -266,7 +267,15 @@ class CommNetMLP(nn.Module):
                           'o_t': o_t.squeeze(),
                           'c_t': c_t.squeeze(),
                           'a_t': a_t.squeeze(),
-                          'h_t1': h_t1}
+                          'h_t1': h_t1,
+                          }
+
+                # BK: For generating FSM, we have to return quantized_(obs,comm,hx)
+                if self.args.generate_FSM:
+                    latent['q_x'] = q_x.squeeze()
+                    latent['q_c'] = q_c.squeeze()
+                    latent['q_h'] = q_h
+                
                 return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
             else:
                 return action, value_head, (hidden_state.clone(), cell_state.clone())

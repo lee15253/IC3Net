@@ -16,6 +16,8 @@ from storage import Storage
 from trainer import Trainer
 from qbn_trainer import QBNTrainer
 from torch.utils.tensorboard import SummaryWriter
+from moore_machine import MooreMachine
+import ipdb
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -25,7 +27,7 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 # training
 # note: number of rollout-steps = num_rollout_steps x n_agents
-parser.add_argument('--dest', type=str, default='',
+parser.add_argument('--dest', type=str, default='test',
                     help='destination for the training logs to be saved')
 parser.add_argument('--num_train_rollout_steps', type=int, default=30000,
                     help='number of steps to collect trajectory for training')
@@ -57,6 +59,8 @@ parser.add_argument('--comm_quantize_size', default=32, type=int,
                     help='hidden bottle neck size for communication')
 parser.add_argument('--hidden_quantize_size', default=32, type=int,
                     help='hidden bottle neck size for hidden-states')
+parser.add_argument('--generate_FSM', action='store_true', default=False,
+                    help='generate_FSM')
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
@@ -224,7 +228,8 @@ if args.plot:
 
 def run():
     begin_time = time.time()
-
+    
+    
     # 1. Initialize QBN model
     print('Initialize QBN Model')
     obs_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.obs_quantize_size)
@@ -234,28 +239,35 @@ def run():
     # 2. Initialize QBN trainer
     print('Initialize QBN Trainer')
     env = data.init(args.env_name, args)
-    storage = Storage(storage_size=args.storage_size,
-                      n_agents=args.nagents,
-                      observation_dim=env.observation_dim,
-                      hid_size=args.hid_size,
-                      num_actions=args.num_actions[0])
+    storage = Storage(args, observation_dim=env.observation_dim)
     writer = SummaryWriter(os.path.dirname(args.load) + '/' + args.dest)
     qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
 
-    # 3. Collect Trajectory from the trained model
-    print('Collect trajectory from the trained model')
-    mm_net = MMNet(policy_net)
-    qbn_trainer.perform_rollouts(mm_net, args.num_train_rollout_steps, store=True)
+    # BK: When generating FSM, skip 3~5
+    if not args.generate_FSM:
+        # 3. Collect Trajectory from the trained model
+        print('Collect trajectory from the trained model')
+        mm_net = MMNet(policy_net)
+        qbn_trainer.perform_rollouts(mm_net, args.num_train_rollout_steps, store=True)
 
-    # 4. Train & Insert QBN (check the performance iteratively)
-    print('Train QBN model')
-    #qbn_trainer.train_all()
+        # 4. Train & Insert QBN (check the performance iteratively)
+        print('Train QBN model')
+        qbn_trainer.train_all()
 
-    # 5. Fine-tune Network
-    print('Fine-tune QBN model')
-    qbn_trainer.finetune()
+        # 5. Fine-tune Network
+        print('Fine-tune QBN model')
+        qbn_trainer.finetune()
 
-    # 6. Minimization or Functional Pruning
+    else:
+        # 6. Minimization or Functional Pruning
+        print('Generate moore-machine')
+        mmn_directory = os.path.dirname(args.load) + '/' + args.dest + '/mmn.pth'
+        moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
+                                     policy_net, mmn_directory, storage, writer)
+        moore_machine.make_fsm(episodes=3000, seed=args.seed)
+
+    
+    
 
 
 def save(path):
@@ -291,7 +303,8 @@ if args.display:
 if args.save != '':
     save(args.save)
 
-if sys.flags.interactive == 0 and args.nprocesses > 1:
-    trainer.quit()
-    import os
-    os._exit(0)
+# TODO: 현재 process=1로 고정해서, 주석처리해놓음
+# if sys.flags.interactive == 0 and args.nprocesses > 1:
+#     trainer.quit()
+#     import os
+#     os._exit(0)

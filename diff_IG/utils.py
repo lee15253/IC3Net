@@ -42,7 +42,6 @@ def calculate_outputs_and_gradients_steps(inputs, model, original_image_x, input
             input.grad.data.fill_(0)
         gradients.append(bits_gradients)
 
-    ipdb.set_trace()
     gradients = np.array(gradients)  # (51,100,1,80,80)
     assert gradients[0][0].shape == inputs[0][0].shape
     return gradients
