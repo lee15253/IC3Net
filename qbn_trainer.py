@@ -219,6 +219,8 @@ class QBNTrainer():
                     prev_hid = prev_hid.detach()
 
             action = select_action(self.args, action_out)
+            # BK
+            # latent['actual_a_t'] = action[0].squeeze(0)
             action, actual = translate_action(self.args, self.env, action)
             next_state, reward, done, info = self.env.step(actual)
 
