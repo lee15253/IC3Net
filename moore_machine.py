@@ -74,7 +74,7 @@ class MooreMachine():
         self.qbn_trainer = QBNTrainer(args, env, self.model.policy_net, self.model.obs_qb_net, 
                                  self.model.comm_qb_net, self.model.hidden_qb_net, self.storage, self.writer)
 
-    def make_fsm(self, episodes=10, seed=1):
+    def make_fsm(self, num_steps=10, seed=1):
         """
         Makes FSM.
         1. rollout with fine-tuned RL agents -> get final (q_obs, q_hx, q_comm)
@@ -100,11 +100,12 @@ class MooreMachine():
         
         # TODO: how many rollout_steps are needed?
         # n_rollout_steps = self.args.num_train_rollout_steps
-        n_rollout_steps = episodes
         self.qbn_trainer.perform_rollouts(self.model, n_rollout_steps,
                                            net_type = 'fine_tuned_model(before_FSM)', store = True)
-        q_x_batch, q_c_batch, q_h_batch, a_batch = self.qbn_trainer.storage.fetch_fsm_data()                                  
+        q_x_batch, q_c_batch, q_h_batch, a_batch = self.qbn_trainer.storage.fetch_fsm_data()
+        ipdb.set_trace()                                  
         new_entries = self.update_fsm(q_x_batch, q_c_batch, q_h_batch, a_batch)
+        ipdb.set_trace()
 
     def update_fsm(self, q_x_batch, q_c_batch, q_h_batch, a_batch):
         """
@@ -171,7 +172,6 @@ class MooreMachine():
 
         return new_entries
 
-    
     def _get_index(self, source, item, force=True):
         """
         Returns index of the item in the source
@@ -208,8 +208,11 @@ class MooreMachine():
         info_file.write('Total Unique States:{}\n'.format(len(self.state_space)))
         info_file.write('Total Unique Obs:{}\n'.format(len(self.obs_space)))
         info_file.write('Total Unique Comm:{}\n'.format(len(self.comm_space)))
+        qc = [list(v.keys()) for i,v in self.transaction.items()]
+        qc = list(itertools.chain.from_iterable(qc))
+        info_file.write('Total Unique Obs-comm:{}\n'.format(len(qc)))
         info_file.write('Start h_t_1:{}\n'.format(self.second_state))
-
+        
         # ht - at mapping table
         info_file.write('\n\nStates Description:\n')
         t1 = PrettyTable(["Name", "Action", "Description" if not self.minimized else 'Sub States'])
@@ -220,11 +223,8 @@ class MooreMachine():
 
         # transaction table
         if not self.minimized:
-            qc = [list(v.keys()) for i,v in self.transaction.items()]
-            qc = list(itertools.chain.from_iterable(qc))
             column_names = [""] + qc
             column_names = list(set(column_names))
-            ipdb.set_trace()
             t = PrettyTable(column_names)
             for key in sorted(self.transaction.keys()):
                 t.add_row([key]+[(self.transaction[key][c] if c in self.transaction[key] else None) for c in column_names[1:]])
@@ -232,5 +232,145 @@ class MooreMachine():
         info_file.write('\n\nTransaction Matrix:    (StateIndex_ObservationIndex x StateIndex)' + '\n')
         info_file.write(t.__str__())
 
-
         info_file.close()
+
+    def minimize_partial_fsm(self):
+        """
+        Minimizing the whole Finite State Machine(FSM) to fewer states.
+        """
+        ipdb.set_trace()
+        _states = sorted(self.transaction.keys())
+        compatibility_mat = {s: {p: False if self.state_desc[s]['action'] != self.state_desc[p]['action'] else None
+                                 for p in _states[:i + 1]}
+                             for i, s in enumerate(_states[1:])}
+        unknowns = []
+        for s in compatibility_mat.keys():
+            for k in compatibility_mat[s].keys():
+                if compatibility_mat[s][k] is None:
+                    unknowns.append((s, k))
+
+        unknown_lengths = deque(maxlen=1000)
+        while len(unknowns) != 0:
+            # next 3 lines are experimental
+            if len(unknown_lengths) > 0 and unknown_lengths.count(unknown_lengths[0]) == unknown_lengths.maxlen:
+                s, k = unknowns[-1]
+                compatibility_mat[s][k] = True
+
+            s, k = unknowns.pop(0)
+            if compatibility_mat[s][k] is None:
+                compatibility_mat[s][k] = []
+                for obs_i in range(len(self.obs_space)):
+                    if (obs_i not in self.transaction[s]) or (self.transaction[s][obs_i] is None) or \
+                            (obs_i not in self.transaction[k]) or (self.transaction[k][obs_i] is None):
+                        pass
+                    else:
+                        next_s, next_k = self.transaction[s][obs_i], self.transaction[k][obs_i]
+                        action_next_s = self.state_desc[next_s]['action']
+                        action_next_k = self.state_desc[next_k]['action']
+                        # if next_s != next_k and next_k != k and next_s != s:
+                        if next_s != next_k and not (next_k == k and next_s == s):
+                            if action_next_s != action_next_k:
+                                compatibility_mat[s][k] = False
+                                break
+                            first, sec = sorted([next_k, next_s])[::-1]
+                            if type(compatibility_mat[first][sec]).__name__ == 'bool' and not \
+                                    compatibility_mat[first][sec]:
+                                compatibility_mat[s][k] = False
+                                break
+                            elif compatibility_mat[first][sec] is None or \
+                                    type(compatibility_mat[first][sec]).__name__ != 'bool':
+                                compatibility_mat[s][k].append((first, sec))
+
+            elif type(compatibility_mat[s][k]).__name__ != 'bool':
+                for i, (m, n) in enumerate(compatibility_mat[s][k]):
+                    if type(compatibility_mat[m][n]).__name__ == 'bool' and not compatibility_mat[m][n]:
+                        compatibility_mat[s][k] = False
+                        break
+                    elif type(compatibility_mat[m][n]).__name__ == 'bool' and compatibility_mat[m][n]:
+                        compatibility_mat[s][k].pop(i)
+
+            if type(compatibility_mat[s][k]).__name__ != 'bool':
+                if len(compatibility_mat[s][k]) == 0:
+                    compatibility_mat[s][k] = True
+                else:
+                    unknowns.append((s, k))
+
+            unknown_lengths.append(len(unknowns))
+
+        new_states = []
+        new_state_info = {}
+        processed = {x: False for x in _states}
+        belongs_to = {_: None for _ in _states}
+        for s in sorted(_states):
+            if not processed[s]:
+                comp_pair = [sorted((s, x))[::-1] for x in _states if
+                             (x != s and compatibility_mat[max(s, x)][min(s, x)])]
+                if len(comp_pair) != 0:
+                    _new_state = self.traverse_compatible_states(comp_pair, compatibility_mat)
+                    _new_state.sort(key=len, reverse=True)
+                else:
+                    _new_state = [[s]]
+                for d in _new_state[0]:
+                    processed[d] = True
+                    belongs_to[d] = len(new_states)
+                new_state_info[len(new_states)] = {'action': self.state_desc[_new_state[0][0]]['action'],
+                                                   'sub_states': _new_state[0]}
+                new_states.append(_new_state[0])
+
+        new_trans = {}
+        for i, s in enumerate(new_states):
+            new_trans[i] = {}
+            for o in range(len(self.obs_space)):
+                new_trans[i][o] = None
+                for sub_s in s:
+                    if o in self.transaction[sub_s] and self.transaction[sub_s][o] is not None:
+                        new_trans[i][o] = belongs_to[self.transaction[sub_s][o]]
+                        break
+
+        # if the new_state comprising of start-state has just one sub-state ;
+        # then we can merge this new_state with other new_states as the action of the start-state doesn't matter
+        start_state_p = belongs_to[self.start_state]
+        if len(new_states[start_state_p]) == 1:
+            start_state_trans = new_trans[start_state_p]
+            for state in new_trans.keys():
+                if state != start_state_p and new_trans[state] == start_state_trans:
+                    new_trans.pop(start_state_p)
+                    new_state_info.pop(start_state_p)
+                    new_state_info[state]['sub_states'] += new_states[start_state_p]
+
+                    # This could be highly wrong (On God's Grace :D )
+                    for _state in new_trans.keys():
+                        for _o in new_trans[_state].keys():
+                            if new_trans[_state][_o] == start_state_p:
+                                new_trans[_state][_o] = state
+
+                    start_state_p = state
+                    break
+
+        # Minimize Observation Space (Combine observations which show the same transaction behaviour for all states)
+        _obs_minobs_map = {}
+        _minobs_obs_map = {}
+        _trans_minobs_map = {}
+        min_trans = {s: {} for s in new_trans.keys()}
+        obs_i = 0
+        for i in range(len(self.obs_space)):
+            _trans_key = [new_trans[s][i] for s in sorted(new_trans.keys())].__str__()
+            if _trans_key not in _trans_minobs_map:
+                obs_i += 1
+                o = 'o_' + str(obs_i)
+                _trans_minobs_map[_trans_key] = o
+                _minobs_obs_map[o] = [i]
+                for s in new_trans.keys():
+                    min_trans[s][o] = new_trans[s][i]
+            else:
+                _minobs_obs_map[_trans_minobs_map[_trans_key]].append(i)
+            _obs_minobs_map[i] = _trans_minobs_map[_trans_key]
+
+        # Update information
+        self.transaction = min_trans
+        self.state_desc = new_state_info
+        self.state_space = list(self.transaction.keys())
+        self.start_state = start_state_p
+        self.obs_minobs_map = _obs_minobs_map
+        self.minobs_obs_map = _minobs_obs_map
+        self.minimized = True

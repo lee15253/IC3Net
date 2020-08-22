@@ -264,8 +264,9 @@ def run():
         mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                      policy_net, mmn_directory, storage, writer)
-        moore_machine.make_fsm(episodes=100, seed=args.seed)
+        moore_machine.make_fsm(num_steps=100, seed=args.seed)
         moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
+        moore_machine.minimize_partial_fsm() 
 
 
 
