@@ -309,8 +309,8 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-if args.load != '':
-    load(args.load)
+# if args.load != '':
+#     load(args.load)
 
 run()
 if args.display:

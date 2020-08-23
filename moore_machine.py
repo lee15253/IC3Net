@@ -142,7 +142,7 @@ class MooreMachine():
 
             # TODO: When? Maybe partial-fsm을 처리할 때?
             if self.state_desc[qh_index]['action'] == str(None) and a_batch[t] is not None:
-                ipdb.set_trace()
+                
                 self.state_desc[qh_index]['action'] = str(a_batch[t])
             
             # update self.transaction
@@ -185,7 +185,7 @@ class MooreMachine():
                 else:               _index = 해당 obs의 기존 index
         ~~
         """
-        # ipdb.set_trace()
+
         _index = np.where(np.all(source==item, axis=1))[0] if len(source) != 0 else []
         if len(_index) != 0:  # already in before_observation
             _index = _index[0]
@@ -200,7 +200,6 @@ class MooreMachine():
         return source, _index
 
     def save(self, info_file):
-        # ipdb.set_trace()
         info_file.write('Total Unique States:{}\n'.format(len(self.state_space)))
         qc = [list(v.keys()) for i,v in self.transaction.items()]
         qc = list(itertools.chain.from_iterable(qc))
@@ -235,7 +234,6 @@ class MooreMachine():
             for key in sorted(self.transaction.keys()):
                 t.add_row([key]+[(self.transaction[key][c] if c in self.transaction[key] else None) for c in column_names[1:]])
         else:
-            ipdb.set_trace()
             column_names = [""] + sorted(self.transaction[list(self.transaction.keys())[0]].keys())
             t = PrettyTable(column_names)
             for key in sorted(self.transaction.keys()):
@@ -266,12 +264,9 @@ class MooreMachine():
             for k in compatibility_mat[s].keys():
                 if compatibility_mat[s][k] is None:
                     unknowns.append((s, k))
-
-        ipdb.set_trace()
         unknown_lengths = deque(maxlen=100000)
 
         pbar = tqdm(total=len(unknowns))
-
         while len(unknowns) != 0:
             # next 3 lines are experimental
             pbar.update(1)
@@ -324,7 +319,6 @@ class MooreMachine():
 
         # hidden_state가 커서 여기까지 2분 이상 소요됨
         # new_states : 새로운 minimized hideen state.
-        # ipdb.set_trace()
         new_states = []
         new_state_info = {}
         processed = {x: False for x in _states}
@@ -359,7 +353,7 @@ class MooreMachine():
                             new_trans[i][qc_i] = belongs_to[self.transaction[sub_s][qc_i]]
                             break
             except:
-                ipdb.set_trace()
+                print('error when making new_transaction table!')
 
         # if the new_state comprising of start-state has just one sub-state ;
         # then we can merge this new_state with other new_states as the action of the start-state doesn't matter
@@ -388,7 +382,6 @@ class MooreMachine():
         # --> 그 extract_from_nn의 if not partial 하면, 그 unknown에 대해서 다 forwarding하면서 check해주는듯
 
         # Minimize Observation Space (Combine observations which show the same transaction behaviour for all states)
-        ipdb.set_trace()
 
         _obs_minobs_map = {}
         _minobs_obs_map = {}

@@ -44,7 +44,7 @@ if __name__ == '__main__':
         os.mkdir(os.path.join('results/', args.env_type, env_name, results_path))
     results_path = os.path.join('results/', args.env_type, env_name, results_path)
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
     env = atari_wrapper(env_name)
     env.seed(args.env_seed)
     obs = env.reset()
@@ -69,6 +69,6 @@ if __name__ == '__main__':
         input_image, model, calculate_outputs_and_gradients_steps, ii_x, ii_q, 
         steps=50, cuda=args.cuda, baseline=baseline_image, results_path=results_path, 
         feed_tTanh=True, env_type=args.env_type)
-    ipdb.set_trace()
+    # ipdb.set_trace()
     input_image_path = os.path.join("./inputs/", args.env, args.input_index + ".jpg")
     mask_diff_ig(attributions, unmasked_attributions, input_image, ii_x, bi_x, input_image_path, results_path)
