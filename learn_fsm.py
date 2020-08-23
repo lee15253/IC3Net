@@ -31,17 +31,17 @@ parser.add_argument('--dest', type=str, default='test',
                     help='destination for the training logs to be saved')
 parser.add_argument('--num_train_rollout_steps', type=int, default=30000,
                     help='number of steps to collect trajectory for training')
-parser.add_argument('--num_test_rollout_steps', type=int, default=5000,
+parser.add_argument('--num_test_rollout_steps', type=int, default=10000,
                      help='number of steps to collect trajectory for testing')
-parser.add_argument('--storage_size', type=int, default=100000,
+parser.add_argument('--storage_size', type=int, default=50000,
                     help='size of storage to store the trajectory')
 parser.add_argument('--noisy_rollouts', action='store_true', default=False,
                     help='perform noisy rollouts to get data diversity in training')
 parser.add_argument('--batch_size', type=int, default=128,
                     help='number of batch size to train the quanitzed bottleneck network')
-parser.add_argument('--qbn_epochs', type=int, default=30,
+parser.add_argument('--qbn_epochs', type=int, default=100,
                     help='number of epochs to train the quantized bottleneck network')
-parser.add_argument('--finetune_epochs', type=int, default=30,
+parser.add_argument('--finetune_epochs', type=int, default=0,
                     help='number of epochs to fine-tune the moore machine network')
 
 # model
@@ -101,6 +101,9 @@ parser.add_argument('--display', action="store_true", default=False,
                     help='Display environment state')
 parser.add_argument('--random', action='store_true', default=False,
                     help="enable random model")
+parser.add_argument('--device', default=0, type=int,
+                    help='number of the gpu-device to use')
+
 
 # CommNet specific args
 parser.add_argument('--commnet', action='store_true', default=False,
@@ -133,9 +136,11 @@ parser.add_argument('--advantages_per_action', default=False, action='store_true
 parser.add_argument('--share_weights', default=False, action='store_true',
                     help='Share weights for hops')
 
-
 init_args_for_env(parser)
 args = parser.parse_args()
+
+torch.set_num_threads(1)
+os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 
 if args.ic3net:
     args.commnet = 1
@@ -227,9 +232,8 @@ if args.plot:
     vis = visdom.Visdom(env=args.plot_env)
 
 def run():
-    begin_time = time.time()
-    
-    
+    log_path = os.path.dirname(args.load) + '/' + args.dest
+
     # 1. Initialize QBN model
     print('Initialize QBN Model')
     obs_qb_net = HxQBNet(input_size=args.hid_size, x_features=args.obs_quantize_size)
@@ -240,10 +244,10 @@ def run():
     print('Initialize QBN Trainer')
     env = data.init(args.env_name, args)
     storage = Storage(args, observation_dim=env.observation_dim)
-    writer = SummaryWriter(os.path.dirname(args.load) + '/' + args.dest)
+    writer = SummaryWriter(log_path)
     qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
 
-    # BK: When generating FSM, skip 3~5
+    # When generating FSM, skip 3~5
     if not args.generate_FSM:
         # 3. Collect Trajectory from the trained model
         print('Collect trajectory from the trained model')
@@ -258,15 +262,14 @@ def run():
         print('Fine-tune QBN model')
         qbn_trainer.finetune()
 
+    # Generate FSM
     else:
         # 6. Minimization or Functional Pruning
         print('Generate moore-machine')
-        mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
-                                     policy_net, mmn_directory, storage, writer)
+                                     policy_net, log_path, storage, writer)
         moore_machine.make_fsm(episodes=100, seed=args.seed)
-        moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
-
+        moore_machine.save(open(os.path.join(log_path, 'fsm.txt'), 'w'))
 
 
 def save(path):

@@ -260,6 +260,7 @@ class CommNetMLP(nn.Module):
                 h_t1 = hidden_state.clone()
                 # TODO: it works in predator-pery but not sure whether other environments have only one action-head
                 a_t = action[0].clone()
+                ac_t = action[1].clone()
                 latent = {'x_t':x_t.squeeze(),
                           'h_t':h_t,
                           'cell_t':cell_t,
@@ -267,6 +268,7 @@ class CommNetMLP(nn.Module):
                           'o_t': o_t.squeeze(),
                           'c_t': c_t.squeeze(),
                           'a_t': a_t.squeeze(),
+                          'ac_t':ac_t.squeeze(),
                           'h_t1': h_t1,
                           }
 
