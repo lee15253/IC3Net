@@ -5,6 +5,7 @@ import argparse
 import os
 
 import numpy as np
+import pickle
 import torch
 import visdom
 import data
@@ -262,13 +263,23 @@ def run():
         # 6. Minimization or Functional Pruning
         print('Generate moore-machine')
         mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
+
+        # TODO: pickling 오류
+        # if os.path.exists(os.path.join(mmn_directory, 'original_mm.p')):
+        #     moore_machine = pickle.load(open(os.path.join(mmn_directory, 'original_mm.p')))
+        # else:
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
-                                     policy_net, mmn_directory, storage, writer)
-        moore_machine.make_fsm(num_steps=100, seed=args.seed)
+                                    policy_net, mmn_directory, storage, writer)
+        moore_machine.make_fsm(num_rollout_steps=100*args.max_steps, seed=args.seed)
+
+        #pickle.dump(moore_machine, open(os.path.join(mmn_directory,'original_mm.p'), 'wb'))
         moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
+        print('fsm saved')
+
         moore_machine.minimize_partial_fsm() 
-
-
+        moore_machine.save(open(os.path.join(mmn_directory, 'minimized_fsm.txt'), 'w'))
+        print('minimized fsm saved')
+        # moore_machine.minimize()
 
 def save(path):
     d = dict()
