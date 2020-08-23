@@ -20,6 +20,7 @@ class Storage():
         self.o_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
         self.c_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
         self.a_t_batch = torch.zeros(self.storage_size, self.n_agents, self.num_actions)
+        self.ac_t_batch = torch.zeros(self.storage_size, self.n_agents, 2)
         self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
 
         # BK: Used in generating FSM
@@ -41,6 +42,7 @@ class Storage():
                 self.o_t_batch[self.idx][agent_idx] = rollouts[step]['o_t'][agent_idx]
                 self.c_t_batch[self.idx][agent_idx] = rollouts[step]['c_t'][agent_idx]
                 self.a_t_batch[self.idx][agent_idx] = rollouts[step]['a_t'][agent_idx]
+                self.ac_t_batch[self.idx][agent_idx] = rollouts[step]['ac_t'][agent_idx]
                 self.h_t1_batch[self.idx][agent_idx] = rollouts[step]['h_t1'][agent_idx]
 
                 # BK: Used in generating FSM
@@ -68,8 +70,9 @@ class Storage():
             cell_t_batch = self.cell_t_batch[indices].to('cpu').detach()
             h_t_batch = self.h_t_batch[indices].to('cpu').detach()
             a_t_batch = self.a_t_batch[indices].to('cpu').detach()
+            ac_t_batch = self.ac_t_batch[indices].to('cpu').detach()
             info_t_batch = self.info_t_batch[indices]
-            data = (x_t_batch, cell_t_batch, h_t_batch, a_t_batch, info_t_batch)
+            data = (x_t_batch, cell_t_batch, h_t_batch, a_t_batch, ac_t_batch, info_t_batch)
         else:
             raise NotImplementedError
         return data

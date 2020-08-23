@@ -38,7 +38,8 @@ class QBNTrainer():
         model_path = self.writer.log_dir + '/mmn.pth'
         mm_net = MMNet(self.policy_net, self.obs_qb_net, self.comm_qb_net, self.hidden_qb_net)
         # Loss function & Optimizer
-        mse_loss = nn.MSELoss().cuda()
+        #mse_loss = nn.MSELoss().cuda()
+        kl_div_loss = nn.KLDivLoss(size_average=False).cuda()
         optimizer = torch.optim.Adam(mm_net.parameters(), lr=1e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.qbn_epochs+1,
                                                                eta_min=0, last_epoch=-1)
@@ -62,16 +63,21 @@ class QBNTrainer():
                 mm_net.to('cpu')
                 optimizer.zero_grad()
                 for train_index in train_batch_indices:
-                    (x_t, cell_t, h_t, a_t, info_t) \
+                    (x_t, cell_t, h_t, a_t, ac_t, info_t) \
                         = self.storage.fetch_train_data(train_index, 'mm')
                     x_t = [x_t.unsqueeze(0), (h_t, cell_t)]
-                    target_action, _, _, _ = mm_net(x_t, info_t)
+                    action, _, _, _ = mm_net(x_t, info_t)
                     # a_t & target-action is the log-softmax logit
-                    loss = mse_loss(a_t, target_action[0].squeeze(0))
+                    #loss = mse_loss(a_t, target_action[0].squeeze(0))
+                    target_action_prob = torch.exp(a_t)
+                    target_comm_prob = torch.exp(ac_t)
+                    loss = kl_div_loss(action[0].squeeze(0), target_action_prob) \
+                            + kl_div_loss(action[1].squeeze(0), target_comm_prob)
                     loss.backward()
                     train_losses.append(loss.item())
 
                 mm_net.to('cuda')
+                torch.nn.utils.clip_grad_norm_(mm_net.parameters(), 0.5)
                 optimizer.step()
                 scheduler.step()
             self.writer.add_scalar('Quantized/train_loss', np.mean(train_losses), epoch)
@@ -82,11 +88,15 @@ class QBNTrainer():
                 for val_batch_indices in val_sampler:
                     mm_net.to('cpu')
                     for val_index in val_batch_indices:
-                        (x_t, cell_t, h_t, a_t, info_t) \
+                        (x_t, cell_t, h_t, a_t, ac_t, info_t) \
                             = self.storage.fetch_train_data(val_index, 'mm')
                         x_t = [x_t.unsqueeze(0), (h_t, cell_t)]
-                        target_action, _, _, _ = mm_net(x_t, info_t)
-                        loss = mse_loss(a_t, target_action[0].squeeze(0))
+                        action, _, _, _ = mm_net(x_t, info_t)
+                        #loss = mse_loss(a_t, target_action[0].squeeze(0))
+                        target_action_prob = torch.exp(a_t)
+                        target_comm_prob = torch.exp(ac_t)
+                        loss = kl_div_loss(action[0].squeeze(0), target_action_prob) \
+                                + kl_div_loss(action[1].squeeze(0), target_comm_prob)
                         val_losses.append(loss.item())
                 self.writer.add_scalar('Quantized/val_loss', np.mean(val_losses), epoch)
 
@@ -184,13 +194,14 @@ class QBNTrainer():
             batch += episode
         stats['num_steps'] = len(batch)
         batch = Transition(*zip(*batch))
-        
+
         if store:
             latent = batch[-1]
             self.storage.store(rollouts=latent)
         avg_rewards = np.mean(stats['reward']) / stats['num_episodes']
         self.writer.add_scalar(net_type + '/avg_rewards', avg_rewards, epoch)
-        self.writer.add_scalar(net_type + '/success_rate', stats['success'] / stats['num_episodes'], epoch)
+        if 'success' in stats:
+            self.writer.add_scalar(net_type + '/success_rate', stats['success'] / stats['num_episodes'], epoch)
         return avg_rewards
 
     def get_episode(self, mm_net):
