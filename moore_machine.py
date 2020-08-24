@@ -15,7 +15,12 @@ from models import MMNet
 from qbn_trainer import QBNTrainer
 import ipdb
 import itertools
+<<<<<<< HEAD
+from tqdm import tqdm
+import pickle
+=======
 
+>>>>>>> 0fcdbebb2cce99c397bf0477a1b2daa25bd92102
 
 class MooreMachine():
     """
@@ -43,12 +48,14 @@ class MooreMachine():
                 os=np.array([]), cs=np.array([]), start_state=0, total_actions=None):
         
         self.args = args
+        self.env = env
         self.transaction = t
         self.state_desc = sd
         self.state_space = ss
         self.obs_space = os
         self.comm_space = cs
         self.start_state = start_state
+        self.mmn_directory = mmn_directory
         self.minimized = False
         self.obs_minobs_map = None
         self.minobs_obs_map = None
@@ -231,6 +238,217 @@ class MooreMachine():
 
         info_file.write('\n\nTransaction Matrix:    (StateIndex_ObservationIndex x StateIndex)' + '\n')
         info_file.write(t.__str__())
-
-
+        # info_file.write('\n\nTransaction Matrix:    (StateIndex_ObservationIndex x StateIndex)' + '\n')
+        # info_file.write(t.__str__())
         info_file.close()
+
+    def minimize_partial_fsm(self):
+        """
+        Minimizing the whole Finite State Machine(FSM) to fewer states.
+        """
+        # Considering communications        
+        qc_list = [list(v.keys()) for i,v in self.transaction.items()]
+        qc_list = list(itertools.chain.from_iterable(qc_list))
+
+        _states = sorted(self.transaction.keys())
+        compatibility_mat = {s: {p: False if self.state_desc[s]['action'] != self.state_desc[p]['action'] else None
+                                 for p in _states[:i + 1]}
+                             for i, s in enumerate(_states[1:])}
+        unknowns = []
+        for s in compatibility_mat.keys():
+            for k in compatibility_mat[s].keys():
+                if compatibility_mat[s][k] is None:
+                    unknowns.append((s, k))
+        unknown_lengths = deque(maxlen=100000)
+
+        pbar = tqdm(total=len(unknowns))
+        while len(unknowns) != 0:
+            # next 3 lines are experimental
+            pbar.update(1)
+            if len(unknown_lengths) > 0 and unknown_lengths.count(unknown_lengths[0]) == unknown_lengths.maxlen:
+                s, k = unknowns[-1]
+                compatibility_mat[s][k] = True
+
+            s, k = unknowns.pop(0)
+            if compatibility_mat[s][k] is None:
+                compatibility_mat[s][k] = []
+                for qc_i in qc_list:
+                    if (qc_i not in self.transaction[s]) or (self.transaction[s][qc_i] is None) or \
+                            (qc_i not in self.transaction[k]) or (self.transaction[k][qc_i] is None):
+                        pass
+                    else:
+                        next_s, next_k = self.transaction[s][qc_i], self.transaction[k][qc_i]
+                        action_next_s = self.state_desc[next_s]['action']
+                        action_next_k = self.state_desc[next_k]['action']
+                        # if next_s != next_k and next_k != k and next_s != s:
+                        if next_s != next_k and not (next_k == k and next_s == s):
+                            if action_next_s != action_next_k:
+                                compatibility_mat[s][k] = False
+                                break
+                            first, sec = sorted([next_k, next_s])[::-1]
+                            if type(compatibility_mat[first][sec]).__name__ == 'bool' and not \
+                                    compatibility_mat[first][sec]:
+                                compatibility_mat[s][k] = False
+                                break
+                            elif compatibility_mat[first][sec] is None or \
+                                    type(compatibility_mat[first][sec]).__name__ != 'bool':
+                                compatibility_mat[s][k].append((first, sec))
+
+            elif type(compatibility_mat[s][k]).__name__ != 'bool':
+                for i, (m, n) in enumerate(compatibility_mat[s][k]):
+                    if type(compatibility_mat[m][n]).__name__ == 'bool' and not compatibility_mat[m][n]:
+                        compatibility_mat[s][k] = False
+                        break
+                    elif type(compatibility_mat[m][n]).__name__ == 'bool' and compatibility_mat[m][n]:
+                        compatibility_mat[s][k].pop(i)
+
+            if type(compatibility_mat[s][k]).__name__ != 'bool':
+                if len(compatibility_mat[s][k]) == 0:
+                    compatibility_mat[s][k] = True
+                else:
+                    unknowns.append((s, k))
+
+            unknown_lengths.append(len(unknowns))
+            # print('처리해야할 (남은) unknowns 개수:',len(unknowns))
+        pbar.close()
+
+        # hidden_state가 커서 여기까지 2분 이상 소요됨
+        # new_states : 새로운 minimized hideen state.
+        new_states = []
+        new_state_info = {}
+        processed = {x: False for x in _states}
+        belongs_to = {_: None for _ in _states}
+        # 모든 state를 돌면서, 1. comp_pair(?)를 구하고 2. 걔랑 compatible한 것들을 self.traverse_compatible_states로 찾아서
+        # _new_state에 subgroup으로 묶이게 한다. 이때 한 state가 여러 new_state에 포함된다. 
+        # 구분 기준을 잘 모르겠으나, 이후 transaction을 할 때 같은 동작 방식인것들로 추정.
+        for s in sorted(_states):
+            if not processed[s]:
+                comp_pair = [sorted((s, x))[::-1] for x in _states if
+                             (x != s and compatibility_mat[max(s, x)][min(s, x)])]
+                if len(comp_pair) != 0:
+                    _new_state = self.traverse_compatible_states(comp_pair, compatibility_mat)
+                    _new_state.sort(key=len, reverse=True)
+                else:
+                    _new_state = [[s]]
+                for d in _new_state[0]:
+                    processed[d] = True
+                    belongs_to[d] = len(new_states)
+                new_state_info[len(new_states)] = {'action': self.state_desc[_new_state[0][0]]['action'],
+                                                   'sub_states': _new_state[0]}
+                new_states.append(_new_state[0])
+
+        new_trans = {}
+        for i, s in enumerate(new_states):
+            new_trans[i] = {}
+            try:
+                for qc_i in qc_list:
+                    new_trans[i][qc_i] = None
+                    for sub_s in s:
+                        if qc_i in self.transaction[sub_s] and self.transaction[sub_s][qc_i] is not None:
+                            new_trans[i][qc_i] = belongs_to[self.transaction[sub_s][qc_i]]
+                            break
+            except:
+                print('error when making new_transaction table!')
+
+        # if the new_state comprising of start-state has just one sub-state ;
+        # then we can merge this new_state with other new_states as the action of the start-state doesn't matter
+        # TODO: 일단 start_state 관련 뭔소린지 모르겠으므로 일단 생략조진다
+        # start_state_p = belongs_to[self.start_state]
+        # if len(new_states[start_state_p]) == 1:
+        #     start_state_trans = new_trans[start_state_p]
+        #     for state in new_trans.keys():
+        #         if state != start_state_p and new_trans[state] == start_state_trans:
+        #             new_trans.pop(start_state_p)
+        #             new_state_info.pop(start_state_p)
+        #             new_state_info[state]['sub_states'] += new_states[start_state_p]
+
+        #             # This could be highly wrong (On God's Grace :D )
+        #             for _state in new_trans.keys():
+        #                 for _o in new_trans[_state].keys():
+        #                     if new_trans[_state][_o] == start_state_p:
+        #                         new_trans[_state][_o] = state
+
+        #             start_state_p = state
+        #             break
+
+        # TODO: Pong의 경우, S_2에 O1이 들어오면 어케하는거? -> O_1이라는건 어떤 obs들의 집합이고, S_2일때 해당 observation이 들어오는
+        # 경우가 없었다는것 -> 맞나? -> 근데 순서가 이상함
+        # 이호준: Pong 그림: S2의 상태에선, O_1이 들어올 일이 없는 것이기 때문에 O_1이 없다. 
+        # --> 그 extract_from_nn의 if not partial 하면, 그 unknown에 대해서 다 forwarding하면서 check해주는듯
+
+        # Minimize Observation Space (Combine observations which show the same transaction behaviour for all states)
+
+        _obs_minobs_map = {}
+        _minobs_obs_map = {}
+        _trans_minobs_map = {}
+        min_trans = {s: {} for s in new_trans.keys()}
+        # new_qc_i = 0
+        for qc_i in qc_list:
+            _trans_key = [new_trans[s][qc_i] for s in sorted(new_trans.keys())].__str__()
+            if _trans_key not in _trans_minobs_map:
+                # new_qc_i += 1  # TODO: qc버전으로 수정해야함!!!!!!!
+                o = qc_i
+                _trans_minobs_map[_trans_key] = o
+                _minobs_obs_map[o] = [qc_i]
+                for s in new_trans.keys():
+                    min_trans[s][o] = new_trans[s][qc_i]
+            else:
+                _minobs_obs_map[_trans_minobs_map[_trans_key]].append(qc_i)
+            _obs_minobs_map[qc_i] = _trans_minobs_map[_trans_key]
+
+
+        # save minimized_files
+        minimized_files = [self.transaction, self.state_desc, self.state_space, self.second_state, self.obs_minobs_map, self.minobs_obs_map, self.minimized]
+        with open(os.path.join(self.mmn_directory,'minimized_files.p'), 'wb') as handle:
+            pickle.dump(minimized_files, handle, protocol = pickle.HIGHEST_PROTOCOL)
+        
+    @staticmethod
+    def traverse_compatible_states(states, compatibility_mat):
+        for i, s in enumerate(states):
+            for j, s_next in enumerate(states[i + 1:]):
+                compatible = True
+                for m in s:
+                    for n in s_next:
+                        if m != n and not compatibility_mat[max(m, n)][min(m, n)]:
+                            compatible = False
+                            break
+                    if not compatible:
+                        break
+                if compatible:
+                    _states = states[:i] + [sorted(list(set(s + s_next)))] + states[i + j + 2:]
+                    return MooreMachine.traverse_compatible_states(_states, compatibility_mat)
+        return states
+    
+    def evaluate(self, num_episodes, seed):
+        with open(os.path.join(self.mmn_directory, 'minimized_files.p'), 'rb') as handle:
+            m_files = pickle.load(handle)
+
+        ipdb.set_trace()
+        self.transaction = m_files[0]
+        self.state_desc = m_files[1]
+        self.state_space = m_files[2]
+        # self.start_state = start_state_p
+        self.second_state = list(m_files[3])
+        self.obs_minobs_map = m_files[4]
+        self.minobs_obs_map = m_files[5]
+        self.minimized = m_files[6]
+
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        self.model.eval()
+        total_reward = 0
+
+        for ep in range(num_episodes):
+            obs = self.env.reset(epoch=0)
+            prev_state = self.model.policy_net.init_hidden(batch_size=obs.shape[0])
+            ep_reward = 0
+            # curr_state = self.second_state[np.random.choice(len(self.second_state))]  # random from second_state
+            # TODO: quantized는 agent_0기준으로 했지만, 갈아끼는건 모든 agent를 갈아낀다.
+
+            ipdb.set_trace()
+            # for t in range(self.args.max_steps):
+                # obs_x = 
+                # x = [obs, ]
+                

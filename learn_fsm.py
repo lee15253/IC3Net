@@ -61,7 +61,8 @@ parser.add_argument('--hidden_quantize_size', default=32, type=int,
                     help='hidden bottle neck size for hidden-states')
 parser.add_argument('--generate_FSM', action='store_true', default=False,
                     help='generate_FSM')
-parser.add_argument('--hello everyone', action='store_true', default=False)
+parser.add_argument('--eval_min_FSM', action='store_true', default=False,
+                    help='evaluate_minimized_FSM')
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
