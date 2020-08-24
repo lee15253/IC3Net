@@ -270,6 +270,7 @@ class TrafficJunctionEnv(gym.Env):
                 else:
                     grid[p[0]][p[1]] = '<b>'
 
+
         for row_num, row in enumerate(grid):
             for idx, item in enumerate(row):
                 if row_num == idx == 0:

@@ -222,7 +222,6 @@ class QBNTrainer():
 
             x = [state, prev_hid]
             action_out, value, prev_hid, latent = mm_net(x, info)
-
             if (t + 1) % self.args.detach_gap == 0:
                 if self.args.rnn_type == 'LSTM':
                     prev_hid = (prev_hid[0].detach(), prev_hid[1].detach())

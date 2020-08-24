@@ -78,7 +78,7 @@ if __name__=='__main__':
          '--vision': '0',
          '--recurrent': None,
          '--add_rate_min': '0.05',
-         '--add_rate_max': '0.02',
+         '--add_rate_max': '0.2',
          '--curr_start': '250',
          '--curr_end': '1250',
          '--difficulty': 'medium',
