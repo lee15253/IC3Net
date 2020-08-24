@@ -222,7 +222,6 @@ class QBNTrainer():
 
             x = [state, prev_hid]
             action_out, value, prev_hid, latent = mm_net(x, info)
-
             if (t + 1) % self.args.detach_gap == 0:
                 if self.args.rnn_type == 'LSTM':
                     prev_hid = (prev_hid[0].detach(), prev_hid[1].detach())
@@ -231,7 +230,7 @@ class QBNTrainer():
 
             action = select_action(self.args, action_out)
             # BK
-            latent['actual_a_t'] = action[0].squeeze(0)
+            # latent['actual_a_t'] = action[0].squeeze(0)
             action, actual = translate_action(self.args, self.env, action)
             next_state, reward, done, info = self.env.step(actual)
 

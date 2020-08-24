@@ -66,7 +66,7 @@ class MMNet(nn.Module):
 
     def get_action_linear(self, state, decode=False):
         # TODO: 언제쓰지?
-        # ipdb.set_trace()
+        ipdb.set_trace()
         if decode:  # quantize를 시킨 경우인듯?
             hx = self.bhx_net.decode(state)
         else:
@@ -75,7 +75,7 @@ class MMNet(nn.Module):
 
     def transact(self, o_x, hx_x):
         # TODO: 언제쓰지?
-        # ipdb.set_trace()
+        ipdb.set_trace()
         hx_x = self.gru_net.transact(self.obx_net.decode(o_x), self.bhx_net.decode(hx_x))
         _, hx_x = self.bhx_net(hx_x)
         return hx_x
