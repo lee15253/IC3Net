@@ -102,7 +102,9 @@ class MooreMachine():
         print('\nrollout finished')
         self.qbn_trainer.perform_rollouts(self.model, num_rollout_steps,
                                            net_type = 'fine_tuned_model(before_FSM)', store = True)
-        q_x_batch, q_c_batch, q_h_batch, a_batch = self.qbn_trainer.storage.fetch_fsm_data()                                  
+        q_x_batch, q_c_batch, q_h_batch, a_batch = self.qbn_trainer.storage.fetch_fsm_data()
+        # (env.reset()(=o), torch.zeros(=h)) -> q_h_batch[0]가 첫 번째 transaction이 되어야 한다
+        
         new_entries = self.update_fsm(q_x_batch, q_c_batch, q_h_batch, a_batch)
 
     def update_fsm(self, q_x_batch, q_c_batch, q_h_batch, a_batch):
@@ -426,7 +428,6 @@ class MooreMachine():
         with open(os.path.join(self.mmn_directory, 'minimized_files.p'), 'rb') as handle:
             m_files = pickle.load(handle)
 
-        ipdb.set_trace()
         self.transaction = m_files[0]
         self.state_desc = m_files[1]
         self.state_space = m_files[2]
@@ -442,16 +443,24 @@ class MooreMachine():
 
         self.model.eval()
         total_reward = 0
+        # For convenience
+        # MM_net = self.model
+        # Comm_net = self.model.call_model()
 
-        for ep in range(num_episodes):
-            obs = self.env.reset(epoch=0)
-            prev_state = self.model.policy_net.init_hidden(batch_size=obs.shape[0])
-            ep_reward = 0
-            # curr_state = self.second_state[np.random.choice(len(self.second_state))]  # random from second_state
-            # TODO: quantized는 agent_0기준으로 했지만, 갈아끼는건 모든 agent를 갈아낀다.
+        # with torch.no_grad():
 
-            ipdb.set_trace()
-            for t in range(self.args.max_steps):
-                #obs_x =self.model.
-                pass
-                
+        #     for ep in range(num_episodes):
+        #         x = self.env.reset(epoch=0)
+        #         prev_state = self.model.policy_net.init_hidden(batch_size=x.shape[0])
+        #         ep_reward = 0
+        #         # curr_state = self.second_state[np.random.choice(len(self.second_state))]  # random from second_state
+        #         # TODO: quantized는 agent_0기준으로 했지만, 갈아끼는건 모든 agent를 갈아낀다.
+
+        #         # TODO: t=0초일 때, prev_hid가 0인데
+        #         # transaction table에는 
+        #         ipdb.set_trace()
+        #         for t in range(self.args.max_steps):
+        #             x = Comm_net.encoder(x)
+        #             _, q_x = MM_net.obs_qb_net(x)
+        #             pass
+                    

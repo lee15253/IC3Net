@@ -11,7 +11,7 @@ class Storage():
         self.num_actions = args.num_actions[0]
         self.device = torch.device('cuda')
         self.idx = 0
-        self.FSM = args.generate_FSM
+        self.FSM = args.generate_FSM or args.eval_min_FSM
         
         self.x_t_batch = torch.zeros(self.storage_size, self.n_agents, self.observation_dim)
         self.info_t_batch = deque([], maxlen=self.storage_size)
@@ -21,7 +21,7 @@ class Storage():
         self.c_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
         self.a_t_batch = torch.zeros(self.storage_size, self.n_agents, self.num_actions)
         self.ac_t_batch = torch.zeros(self.storage_size, self.n_agents, 2)
-        self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
+        self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)  # TODO: 필요없나?
 
         # BK: Used in generating FSM
         if self.FSM:
