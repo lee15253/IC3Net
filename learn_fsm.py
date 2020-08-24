@@ -268,7 +268,6 @@ def run():
     # Generate FSM
     elif args.generate_FSM:
         # 6. Minimization or Functional Pruning
-<<<<<<< HEAD
 
         # make FSM
         print('Generate moore-machine')
@@ -289,14 +288,6 @@ def run():
                                     policy_net, mmn_directory, storage, writer)
         moore_machine.evaluate(num_episodes=100, seed=args.seed)
 
-=======
-        print('Generate moore-machine')
-        moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
-                                     policy_net, log_path, storage, writer)
-        moore_machine.make_fsm(episodes=100, seed=args.seed)
-        moore_machine.save(open(os.path.join(log_path, 'fsm.txt'), 'w'))
-
->>>>>>> 0fcdbebb2cce99c397bf0477a1b2daa25bd92102
 
 def save(path):
     d = dict()
@@ -321,8 +312,8 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-if args.load != '':
-    load(args.load)
+# if args.load != '':
+#     load(args.load)
 
 run()
 if args.display:
