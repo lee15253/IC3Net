@@ -16,6 +16,7 @@ from qbn_trainer import QBNTrainer
 import ipdb
 import itertools
 from tqdm import tqdm
+import pickle
 
 class MooreMachine():
     """
@@ -43,12 +44,14 @@ class MooreMachine():
                 os=np.array([]), cs=np.array([]), start_state=0, total_actions=None):
         
         self.args = args
+        self.env = env
         self.transaction = t
         self.state_desc = sd
         self.state_space = ss
         self.obs_space = os
         self.comm_space = cs
         self.start_state = start_state
+        self.mmn_directory = mmn_directory
         self.minimized = False
         self.obs_minobs_map = None
         self.minobs_obs_map = None
@@ -245,8 +248,6 @@ class MooreMachine():
         # info_file.write(t.__str__())
         info_file.close()
 
-        
-
     def minimize_partial_fsm(self):
         """
         Minimizing the whole Finite State Machine(FSM) to fewer states.
@@ -410,6 +411,11 @@ class MooreMachine():
         self.minobs_obs_map = _minobs_obs_map
         self.minimized = True
 
+        # save minimized_files
+        minimized_files = [self.transaction, self.state_desc, self.state_space, self.second_state, self.obs_minobs_map, self.minobs_obs_map, self.minimized]
+        with open(os.path.join(self.mmn_directory,'minimized_files.p'), 'wb') as handle:
+            pickle.dump(minimized_files, handle, protocol = pickle.HIGHEST_PROTOCOL)
+        
     @staticmethod
     def traverse_compatible_states(states, compatibility_mat):
         for i, s in enumerate(states):
@@ -426,3 +432,37 @@ class MooreMachine():
                     _states = states[:i] + [sorted(list(set(s + s_next)))] + states[i + j + 2:]
                     return MooreMachine.traverse_compatible_states(_states, compatibility_mat)
         return states
+    
+    def evaluate(self, num_episodes, seed):
+        with open(os.path.join(self.mmn_directory, 'minimized_files.p'), 'rb') as handle:
+            m_files = pickle.load(handle)
+
+        ipdb.set_trace()
+        self.transaction = m_files[0]
+        self.state_desc = m_files[1]
+        self.state_space = m_files[2]
+        # self.start_state = start_state_p
+        self.second_state = list(m_files[3])
+        self.obs_minobs_map = m_files[4]
+        self.minobs_obs_map = m_files[5]
+        self.minimized = m_files[6]
+
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        self.model.eval()
+        total_reward = 0
+
+        for ep in range(num_episodes):
+            obs = self.env.reset(epoch=0)
+            prev_state = self.model.policy_net.init_hidden(batch_size=obs.shape[0])
+            ep_reward = 0
+            # curr_state = self.second_state[np.random.choice(len(self.second_state))]  # random from second_state
+            # TODO: quantized는 agent_0기준으로 했지만, 갈아끼는건 모든 agent를 갈아낀다.
+
+            ipdb.set_trace()
+            # for t in range(self.args.max_steps):
+                # obs_x = 
+                # x = [obs, ]
+                
