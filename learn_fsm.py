@@ -62,6 +62,8 @@ parser.add_argument('--hidden_quantize_size', default=32, type=int,
                     help='hidden bottle neck size for hidden-states')
 parser.add_argument('--generate_FSM', action='store_true', default=False,
                     help='generate_FSM')
+parser.add_argument('--eval_min_FSM', action='store_true', default=False,
+                    help='evaluate_minimized_FSM')                   
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
@@ -247,9 +249,10 @@ def run():
     storage = Storage(args, observation_dim=env.observation_dim)
     writer = SummaryWriter(log_path)
     qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
+    mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
 
     # When generating FSM, skip 3~5
-    if not args.generate_FSM:
+    if not (args.generate_FSM or args.eval_min_FSM):
         # 3. Collect Trajectory from the trained model
         print('Collect trajectory from the trained model')
         mm_net = MMNet(policy_net)
@@ -264,27 +267,28 @@ def run():
         qbn_trainer.finetune()
 
     # Generate FSM
-    else:
+    elif args.generate_FSM:
         # 6. Minimization or Functional Pruning
-        print('Generate moore-machine')
-        mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
 
-        # TODO: pickling 오류
-        # if os.path.exists(os.path.join(mmn_directory, 'original_mm.p')):
-        #     moore_machine = pickle.load(open(os.path.join(mmn_directory, 'original_mm.p')))
-        # else:
+        # make FSM
+        print('Generate moore-machine')
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                     policy_net, mmn_directory, storage, writer)
-        moore_machine.make_fsm(num_rollout_steps=100*args.max_steps, seed=args.seed)
-
-        #pickle.dump(moore_machine, open(os.path.join(mmn_directory,'original_mm.p'), 'wb'))
+        moore_machine.make_fsm(num_rollout_steps=300, seed=args.seed)
         moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
         print('fsm saved')
 
+        # minimize FSM
         moore_machine.minimize_partial_fsm() 
         moore_machine.save(open(os.path.join(mmn_directory, 'minimized_fsm.txt'), 'w'))
         print('minimized fsm saved')
-        # moore_machine.minimize()
+        
+    elif args.eval_min_FSM:
+        # 7. evaluate minimized FSM
+        moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
+                                    policy_net, mmn_directory, storage, writer)
+        moore_machine.evaluate(num_episodes=100, seed=args.seed)
+
 
 def save(path):
     d = dict()
