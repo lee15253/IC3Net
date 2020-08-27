@@ -169,12 +169,8 @@ class CommNetMLP(nn.Module):
             x_t = x[0].clone()
             h_t = x[1][0].clone()
             cell_t = x[1][1].clone()
-            info_t = copy.deepcopy(info)
-            # BK: init_hidden(=torch.zeros)는 quantized가 안된다
-            # 따라서 t = 0 일때 quantize 한번 시켜준다.
-            
+            info_t = copy.deepcopy(info)            
 
-        # ipdb.set_trace()
         x, hidden_state, cell_state = self.forward_state_encoder(x)
 
         batch_size = x.size()[0]
@@ -243,8 +239,7 @@ class CommNetMLP(nn.Module):
                     hidden_state = self.f_module(inp, hidden_state)
 
                 if hidden_qb_net:
-                    # ipdb.set_trace()
-                    hidden_state, q_h = hidden_qb_net(hidden_state)
+                    hidden_state, q_ht1 = hidden_qb_net(hidden_state)
 
             else:  # MLP|RNN
                 # Get next hidden state from f node
@@ -288,8 +283,8 @@ class CommNetMLP(nn.Module):
                 if self.args.generate_FSM:
                     latent['q_x'] = q_x.squeeze()
                     latent['q_c'] = q_c.squeeze()
-                    latent['q_h'] = q_h
-
+                    latent['q_ht1'] = q_ht1
+                
                 return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
             elif self.args.rnn_type == 'LSTM':
                 return action, value_head, (hidden_state.clone(), cell_state.clone())
