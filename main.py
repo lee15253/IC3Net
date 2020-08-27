@@ -6,7 +6,6 @@ import os
 
 import numpy as np
 import torch
-import visdom
 import data
 from models import *
 from comm import CommNetMLP
@@ -14,6 +13,7 @@ from utils import *
 from action_utils import parse_action_args
 from trainer import Trainer
 from multi_processing import MultiProcessTrainer
+from torch.utils.tensorboard import SummaryWriter
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -96,8 +96,8 @@ parser.add_argument('--comm_mask_zero', action='store_true', default=False,
                     help="Whether communication should be there")
 parser.add_argument('--mean_ratio', default=1.0, type=float,
                     help='how much coooperative to do? 1.0 means fully cooperative')
-parser.add_argument('--rnn_type', default='MLP', type=str,
-                    help='type of rnn to use. [LSTM|MLP]')
+parser.add_argument('--rnn_type', default='GRU', type=str,
+                    help='type of rnn to use. [LSTM|GRU|MLP]')
 parser.add_argument('--detach_gap', default=10000, type=int,
                     help='detach hidden state and cell state for rnns at this interval.'
                     + ' Default 10000 (very high)')
@@ -151,10 +151,8 @@ if args.hard_attn and args.commnet:
     args.dim_actions = env.dim_actions + 1
 
 # Recurrence
-if args.commnet and (args.recurrent or args.rnn_type == 'LSTM'):
+if args.commnet and args.recurrent:
     args.recurrent = True
-    args.rnn_type = 'LSTM'
-
 
 parse_action_args(args)
 
@@ -205,21 +203,18 @@ log['action_loss'] = LogField(list(), True, 'epoch', 'num_steps')
 log['entropy'] = LogField(list(), True, 'epoch', 'num_steps')
 
 if args.plot:
-    vis = visdom.Visdom(env=args.plot_env)
+    writer = SummaryWriter(os.path.dirname(args.save))
 
 def run(num_epochs):
     for ep in range(num_epochs):
         epoch_begin_time = time.time()
         stat = dict()
-        # ipdb.set_trace()
         for n in range(args.epoch_size):
             if n == args.epoch_size - 1 and args.display:
                 trainer.display = True
-            # ipdb.set_trace()
             s = trainer.train_batch(ep)
             merge_stat(s, stat)
             trainer.display = False
-        # ipdb.set_trace()
         epoch_time = time.time() - epoch_begin_time
         epoch = len(log['epoch'].data) + 1
         for k, v in log.items():
@@ -251,9 +246,11 @@ def run(num_epochs):
 
         if args.plot:
             for k, v in log.items():
-                if v.plot and len(v.data) > 0:
-                    vis.line(np.asarray(v.data), np.asarray(log[v.x_axis].data[-len(v.data):]),
-                    win=k, opts=dict(xlabel=v.x_axis, ylabel=k))
+                if isinstance(v.data[-1], np.ndarray):
+                    value = np.mean(v.data[-1])
+                else:
+                    value = v.data[-1]
+                writer.add_scalar(k, value, ep)
 
         if args.save_every and ep and args.save != '' and ep % args.save_every == 0:
             # fname, ext = args.save.split('.')
