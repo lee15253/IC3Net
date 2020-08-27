@@ -102,12 +102,13 @@ class MooreMachine():
         print('\nrollout finished')
         self.qbn_trainer.perform_rollouts(self.model, num_rollout_steps,
                                            net_type = 'fine_tuned_model(before_FSM)', store = True)
-        q_x_batch, q_c_batch, q_h_batch, a_batch = self.qbn_trainer.storage.fetch_fsm_data()
+        q_x_batch, q_c_batch, q_ht1_batch, a_t1_batch, curr_t = self.qbn_trainer.storage.fetch_fsm_data()
         # (env.reset()(=o), torch.zeros(=h)) -> q_h_batch[0]가 첫 번째 transaction이 되어야 한다
         
-        new_entries = self.update_fsm(q_x_batch, q_c_batch, q_h_batch, a_batch)
+        new_entries = self.update_fsm(q_x_batch, q_c_batch, q_ht1_batch, a_t1_batch, curr_t)
+        ipdb.set_trace()
 
-    def update_fsm(self, q_x_batch, q_c_batch, q_h_batch, a_batch):
+    def update_fsm(self, q_x_batch, q_c_batch, q_ht1_batch, a_t1_batch, curr_t):
         """
         udpate self.transaction, self.state_desc
         
@@ -123,52 +124,58 @@ class MooreMachine():
         new_entries
         
         """
-        # (q_x[t] + q_c[t], hidden_t, cell_t)  ->  LSTM  ->  q_h[t]  ->  a_t[t]
+        # (q_x[t] + q_c[t], hidden_t, cell_t)  ->  LSTM  ->  q_h[t+1]  ->  a_t[t+1]
         new_entries = [] 
-        self.second_state = set()
 
-        # TODO: 어거지로 start_space(0000)을 고려해줌
-        # start_state = self.storage.h_t_batch[0]
-        # q_start_state = self.model.hidden_qb_net(start_state)
-        # _, self.start_state = self._get_index(self.state_space, q_start_state, force=True)
-        # TODO: action도 구해서 desc, transaction 다 update?
-
-        for t in range(len(q_x_batch)-1):
+        game_length = self.args.max_steps
+        for t in range(len(q_x_batch)):
             self.obs_space, qx_index = self._get_index(self.obs_space, q_x_batch[t])
             self.comm_space, qc_index = self._get_index(self.comm_space, q_c_batch[t])
-            self.state_space, qh_index = self._get_index(self.state_space, q_h_batch[t])
-            self.state_space, qh_t1_index = self._get_index(self.state_space, q_h_batch[t+1]) 
+
+            # t=0에서는 input_h를 사용하고 그 외는 output_h를 사용해야 한다.
+            if curr_t[t] == 0:
+                # input h를 quantize (same as hidden.encode(000000000))
+                first_h = self.model.hidden_qb_net.encode(torch.zeros(self.args.hid_size)).detach()
+                self.state_space, qh_index = self._get_index(self.state_space, first_h.numpy())
+                self.state_space, qh_t1_index = self._get_index(self.state_space, q_ht1_batch[t])  # output h를 quantize 
+                if t==0:
+                    self.start_state = qh_index
+            else:
+                self.state_space, qh_index = self._get_index(self.state_space, q_ht1_batch[t-1])
+                self.state_space, qh_t1_index = self._get_index(self.state_space, q_ht1_batch[t]) 
+
 
             # update self.state_desc
-            # initialize self.state_desc[qh_index]
-            if qh_index not in self.state_desc:
-                self.state_desc[qh_index] = {'action': str(a_batch[t]), 'description': q_h_batch[0]}
-
-            # TODO: When? Maybe partial-fsm을 처리할 때?
-            if self.state_desc[qh_index]['action'] == str(None) and a_batch[t] is not None:
-                ipdb.set_trace()
-                self.state_desc[qh_index]['action'] = str(a_batch[t])
+            if curr_t[t] == 0:  # extract (h0 -> action) 
+                decoded_qh = self.model.hidden_qb_net.decode(first_h)
+                decoded_qh = decoded_qh.view(1, self.args.hid_size)
+                prob = [F.softmax(head(decoded_qh), dim=-1) for head in self.model.policy_net.heads][0]
+                action = torch.multinomial(prob,1).item()
+                self.state_desc[qh_index] = {'action': str(action), 'description': first_h.numpy()}
+                assert qh_index == 0, 'error in quantized_state indexing'
+            # initialize self.state_desc[qh_index] ((h1,a1), ..., (h20,a20))
+            if qh_t1_index not in self.state_desc:  
+                self.state_desc[qh_t1_index] = {'action': str(a_t1_batch[t]), 'description': q_ht1_batch[t]}
             
+
             # update self.transaction
             qx_qc = str(qx_index)+'_'+str(qc_index)
             # initialize self.transaction[qh_index]
             if qh_index not in self.transaction:  
-                # TODO: 코드 바꿔서 partial이나 minimization에서 문제생길수도
                 # self.transaction[qh_index] = {str(i)+'_'+str(j): None for i in range(len(self.obs_space)) for j in range(len(self.comm_space))}
                 # new_entries += [(s_i, str(i)+'_'+str(j)) for i in range(len(self.obs_space)) for j in range(len(self.comm_space))]
                 self.transaction[qh_index] = {qx_qc: None}
-            # self.transaction[qh_index] exists & obs/comm are not in it
             elif qx_qc not in self.transaction[qh_index]:
-                self.transaction[qh_index][qx_qc] = None  # TODO: 코드 바꿔서 partial에서 문제생길수도
-            
-            new_entries += [(qh_index, qx_qc)]
+                self.transaction[qh_index][qx_qc] = None  
+                # for i in range(len(self.obs_space)):
+                #     for j in range(len(self.comm_space)):
+                #         if str(i)+'_'+str(j) not in self.transaction[qh_index]:
+                #             self.transaction[qh_index][str(i)+'_'+str(j)] = None
+                #         if str(i)+'_'+str(j) not in self.transaction[qh_t1_index]:
+                #             self.transaction[qh_t1_index][str(i)+'_'+str(j)] = None
+                #             if str(i)+'_'+str(j) != qx_qc:
+                #                 new_entries.append((qh_t1_index, str(i)+'_'+str(j)))
             self.transaction[qh_index][qx_qc] = qh_t1_index
-            
-            ## TODO: qh_index[0]이 [0,0,...,0]이 아니라 그 다음 거고, initial observation도 조금씩 달라서,
-            # 시작 state가 동일하지 않다. -> 문제가 되려나?
-            # 일단 q_h_1의 모음 (env.reset() -> h_0(=0벡터) -> LSTM -> h_1)
-            if (t % self.args.max_steps) == 0:
-                self.second_state.add(qh_index)
 
         return new_entries
 
@@ -203,6 +210,7 @@ class MooreMachine():
         
         return source, _index
 
+    # TODO: 이거도 봐야함 ㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜㅜ
     def save(self, info_file):
         info_file.write('Total Unique States:{}\n'.format(len(self.state_space)))
         qc = [list(v.keys()) for i,v in self.transaction.items()]
@@ -220,7 +228,7 @@ class MooreMachine():
             info_file.write('Total Unique Obs:{}\n'.format(num_obs))
             info_file.write('Total Unique Comm:{}\n'.format(num_comm))
 
-        info_file.write('Start h_t_1:{}\n'.format(self.second_state))
+        info_file.write('Start state:{}\n'.format(self.start_state))
 
         # ht - at mapping table
         info_file.write('\n\nStates Description:\n')

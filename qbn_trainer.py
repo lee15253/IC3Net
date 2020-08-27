@@ -8,6 +8,7 @@ from torch.utils.data.sampler import SubsetRandomSampler, BatchSampler
 from action_utils import *
 from models import *
 from utils import *
+import ipdb
 
 Transition = namedtuple('Transition', ('state', 'action', 'action_out', 'value', 'episode_mask', 'episode_mini_mask',
                                        'next_state','reward', 'misc', 'latent'))
@@ -227,10 +228,11 @@ class QBNTrainer():
                     prev_hid = (prev_hid[0].detach(), prev_hid[1].detach())
                 else:
                     prev_hid = prev_hid.detach()
-
+            
             action = select_action(self.args, action_out)
             # BK
             latent['actual_a_t'] = action[0].squeeze(0)
+            latent['curr_t'] = t
             action, actual = translate_action(self.args, self.env, action)
             next_state, reward, done, info = self.env.step(actual)
 

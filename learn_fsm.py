@@ -274,6 +274,7 @@ def run():
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                     policy_net, mmn_directory, storage, writer)
         moore_machine.make_fsm(num_rollout_steps=300, seed=args.seed)
+        ipdb.set_trace()
         moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
         print('fsm saved')
 

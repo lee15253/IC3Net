@@ -30,8 +30,10 @@ class Storage():
             self.q_h_size = args.hidden_quantize_size
             self.q_x_batch = torch.zeros(self.storage_size, self.n_agents, self.q_x_size)
             self.q_c_batch = torch.zeros(self.storage_size, self.n_agents, self.q_c_size)
-            self.q_h_batch = torch.zeros(self.storage_size, self.n_agents, self.q_h_size)
+            # self.q_ht_batch = torch.zeros(self.storage_size, self.n_agents, self.q_h_size)
+            self.q_ht1_batch = torch.zeros(self.storage_size, self.n_agents, self.q_h_size)
             self.actual_a_t_batch = torch.zeros(self.storage_size, self.n_agents)
+            self.curr_t = torch.zeros(self.storage_size)
 
     def store(self, rollouts):
         for step in range(len(rollouts)):
@@ -49,8 +51,10 @@ class Storage():
                 if self.FSM:
                     self.q_x_batch[self.idx][agent_idx] = rollouts[step]['q_x'][agent_idx]
                     self.q_c_batch[self.idx][agent_idx] = rollouts[step]['q_c'][agent_idx]
-                    self.q_h_batch[self.idx][agent_idx] = rollouts[step]['q_h'][agent_idx]
-                    self.actual_a_t_batch[self.idx][agent_idx] = rollouts[step]['actual_a_t'][agent_idx]
+                    # self.q_ht_batch[self.idx][agent_idx] = rollouts[step]['q_ht'][agent_idx]
+                    self.q_ht1_batch[self.idx][agent_idx] = rollouts[step]['q_ht1'][agent_idx]
+                    self.actual_a_t_batch[self.idx][agent_idx] = rollouts[step]['actual_a_t'][agent_idx].item()
+                    self.curr_t[self.idx] = int(rollouts[step]['curr_t'])
 
             self.info_t_batch.append(rollouts[step]['info_t'])
             self.idx = (self.idx + 1) % self.storage_size
@@ -82,7 +86,9 @@ class Storage():
         # agent 1's quantized_(obs,comm,hidden)
         q_x_batch = self.q_x_batch[:self.idx,0,:].to('cpu').detach().numpy()
         q_c_batch = self.q_c_batch[:self.idx,0,:].to('cpu').detach().numpy()
-        q_h_batch = self.q_h_batch[:self.idx,0,:].to('cpu').detach().numpy()
+        # q_ht_batch = self.q_ht_batch[:self.idx,0,:].to('cpu').detach().numpy()
+        q_ht1_batch = self.q_ht1_batch[:self.idx,0,:].to('cpu').detach().numpy()
         # a_t_batch = self.a_t_batch[:self.idx,0,:].to('cpu').detach().numpy()
         a_t_batch = self.actual_a_t_batch[:self.idx,0].to('cpu').detach().numpy()
-        return (q_x_batch, q_c_batch, q_h_batch, a_t_batch)  
+        curr_t = self.curr_t[:self.idx].to('cpu').detach().numpy()
+        return (q_x_batch, q_c_batch, q_ht1_batch, a_t_batch, curr_t)  
