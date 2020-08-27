@@ -6,6 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
+# For debugging
+logs/predator-prey/dim=5-n=3/cooperative/debug
+
+
+
 # Distribution / packaging
 .Python
 env/

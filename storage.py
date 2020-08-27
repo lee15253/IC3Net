@@ -11,7 +11,7 @@ class Storage():
         self.num_actions = args.num_actions[0]
         self.device = torch.device('cuda')
         self.idx = 0
-        self.FSM = args.generate_FSM
+        self.FSM = args.generate_FSM or args.eval_min_FSM
         
         self.x_t_batch = torch.zeros(self.storage_size, self.n_agents, self.observation_dim)
         self.info_t_batch = deque([], maxlen=self.storage_size)
@@ -21,7 +21,7 @@ class Storage():
         self.c_t_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
         self.a_t_batch = torch.zeros(self.storage_size, self.n_agents, self.num_actions)
         self.ac_t_batch = torch.zeros(self.storage_size, self.n_agents, 2)
-        self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)
+        self.h_t1_batch = torch.zeros(self.storage_size, self.n_agents, self.hid_size)  # TODO: 필요없나?
 
         # BK: Used in generating FSM
         if self.FSM:
@@ -50,7 +50,7 @@ class Storage():
                     self.q_x_batch[self.idx][agent_idx] = rollouts[step]['q_x'][agent_idx]
                     self.q_c_batch[self.idx][agent_idx] = rollouts[step]['q_c'][agent_idx]
                     self.q_h_batch[self.idx][agent_idx] = rollouts[step]['q_h'][agent_idx]
-                    # self.actual_a_t_batch[self.idx][agent_idx] = rollouts[step]['actual_a_t'][agent_idx]
+                    self.actual_a_t_batch[self.idx][agent_idx] = rollouts[step]['actual_a_t'][agent_idx]
 
             self.info_t_batch.append(rollouts[step]['info_t'])
             self.idx = (self.idx + 1) % self.storage_size
@@ -83,6 +83,6 @@ class Storage():
         q_x_batch = self.q_x_batch[:self.idx,0,:].to('cpu').detach().numpy()
         q_c_batch = self.q_c_batch[:self.idx,0,:].to('cpu').detach().numpy()
         q_h_batch = self.q_h_batch[:self.idx,0,:].to('cpu').detach().numpy()
-        a_t_batch = self.a_t_batch[:self.idx,0,:].to('cpu').detach().numpy()
-        # a_t_batch = self.actual_a_t_batch[:self.idx,0].to('cpu').detach().numpy()
+        # a_t_batch = self.a_t_batch[:self.idx,0,:].to('cpu').detach().numpy()
+        a_t_batch = self.actual_a_t_batch[:self.idx,0].to('cpu').detach().numpy()
         return (q_x_batch, q_c_batch, q_h_batch, a_t_batch)  

@@ -107,6 +107,10 @@ class MMNet(nn.Module):
     def forward(self, x, info={}):
         return self.policy_net(x, info, self.obs_qb_net, self.comm_qb_net, self.hidden_qb_net)
 
+    # BK: Used in FSM_evaluation
+    def call_model(self):
+        return self.policy_net
+
 
 class MLP(nn.Module):
     def __init__(self, args, num_inputs):

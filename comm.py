@@ -170,7 +170,11 @@ class CommNetMLP(nn.Module):
             h_t = x[1][0].clone()
             cell_t = x[1][1].clone()
             info_t = copy.deepcopy(info)
+            # BK: init_hidden(=torch.zeros)는 quantized가 안된다
+            # 따라서 t = 0 일때 quantize 한번 시켜준다.
+            
 
+        # ipdb.set_trace()
         x, hidden_state, cell_state = self.forward_state_encoder(x)
 
         batch_size = x.size()[0]
@@ -239,6 +243,7 @@ class CommNetMLP(nn.Module):
                     hidden_state = self.f_module(inp, hidden_state)
 
                 if hidden_qb_net:
+                    # ipdb.set_trace()
                     hidden_state, q_h = hidden_qb_net(hidden_state)
 
             else:  # MLP|RNN
