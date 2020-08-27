@@ -16,7 +16,7 @@ class CommNetMLP(nn.Module):
 
     def __init__(self, args, num_inputs):
         """Initialization method for this class, setup various internal networks
-        and weights
+        and weightsfvis
 
         Arguments:
             MLP {object} -- Self
@@ -61,7 +61,10 @@ class CommNetMLP(nn.Module):
 
         if args.recurrent:
             self.init_hidden(args.batch_size)
-            self.f_module = nn.LSTMCell(args.hid_size, args.hid_size)
+            if args.rnn_type == 'LSTM':
+                self.f_module = nn.LSTMCell(args.hid_size, args.hid_size)
+            elif args.rnn_type == 'GRU':
+                self.f_module = nn.GRUCell(args.hid_size, args.hid_size)
 
         else:
             if args.share_weights:
@@ -228,9 +231,13 @@ class CommNetMLP(nn.Module):
 
                 inp = inp.view(batch_size * n, self.hid_size)
 
-                output = self.f_module(inp, (hidden_state, cell_state))
-                hidden_state = output[0]
-                cell_state = output[1]
+                if self.args.rnn_type == 'LSTM':
+                    output = self.f_module(inp, (hidden_state, cell_state))
+                    hidden_state = output[0]
+                    cell_state = output[1]
+                elif self.args.rnn_type == 'GRU':
+                    hidden_state = self.f_module(inp, hidden_state)
+
                 if hidden_qb_net:
                     hidden_state, q_h = hidden_qb_net(hidden_state)
 
@@ -277,10 +284,12 @@ class CommNetMLP(nn.Module):
                     latent['q_x'] = q_x.squeeze()
                     latent['q_c'] = q_c.squeeze()
                     latent['q_h'] = q_h
-                
+
                 return action, value_head, (hidden_state.clone(), cell_state.clone()), latent
-            else:
+            elif self.args.rnn_type == 'LSTM':
                 return action, value_head, (hidden_state.clone(), cell_state.clone())
+            elif self.args.rnn_type == 'GRU':
+                return action, value_head, hidden_state.clone()
         else:
             return action, value_head
 
@@ -290,5 +299,8 @@ class CommNetMLP(nn.Module):
 
     def init_hidden(self, batch_size):
         # dim 0 = num of layers * num of direction
-        return tuple((torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True),
-                      torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True)))
+        if self.args.rnn_type == 'LSTM':
+            return tuple((torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True),
+                          torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True)))
+        elif self.args.rnn_type == 'GRU':
+            return torch.zeros(batch_size * self.nagents, self.hid_size, requires_grad=True)
