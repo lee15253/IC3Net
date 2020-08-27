@@ -171,7 +171,7 @@ class CommNetMLP(nn.Module):
             # 따라서 t = 0 일때 quantize 한번 시켜준다.
             
 
-        # ipdb.set_trace()
+        ipdb.set_trace()
         x, hidden_state, cell_state = self.forward_state_encoder(x)
 
         batch_size = x.size()[0]
