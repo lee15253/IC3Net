@@ -133,8 +133,6 @@ parser.add_argument('--comm_init', default='uniform', type=str,
                     help='how to initialise comm weights [uniform|zeros]')
 parser.add_argument('--hard_attn', default=False, action='store_true',
                     help='Whether to use hard attention: action - talk|silent')
-parser.add_argument('--comm_action_one', default=False, action='store_true',
-                    help='Whether to always talk, sanity check for hard attention.')
 parser.add_argument('--advantages_per_action', default=False, action='store_true',
                     help='Whether to multipy log porb for each chosen action with advantages')
 parser.add_argument('--share_weights', default=False, action='store_true',
@@ -153,8 +151,9 @@ if args.ic3net:
 
     # For TJ set comm action to 1 as specified in paper to showcase
     # importance of individual rewards even in cooperative games
-    if args.env_name == "traffic_junction":
-        args.comm_action_one = True
+    # For our projects, we won't use gating function
+    args.comm_action_one = True
+
 # Enemy comm
 args.nfriendly = args.nagents
 if hasattr(args, 'enemy_comm') and args.enemy_comm:
@@ -250,7 +249,7 @@ def run():
     storage = Storage(args, observation_dim=env.observation_dim)
     writer = SummaryWriter(log_path)
     qbn_trainer = QBNTrainer(args, env, policy_net, obs_qb_net, comm_qb_net, hidden_qb_net, storage, writer)
-    mmn_directory = os.path.dirname(args.load) + '/' + args.dest 
+    mmn_directory = os.path.dirname(args.load) + '/' + args.dest
 
     # When generating FSM, skip 3~5
     if not (args.generate_FSM or args.eval_min_FSM):
@@ -280,10 +279,10 @@ def run():
         print('fsm saved')
 
         # minimize FSM
-        moore_machine.minimize_partial_fsm() 
+        moore_machine.minimize_partial_fsm()
         moore_machine.save(open(os.path.join(mmn_directory, 'minimized_fsm.txt'), 'w'))
         print('minimized fsm saved')
-        
+
     elif args.eval_min_FSM:
         # 7. evaluate minimized FSM
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
@@ -291,7 +290,7 @@ def run():
         moore_machine.evaluate(num_episodes=100, seed=args.seed)
     
     elif args.functional_pruning:
-        
+
 
 
 def save(path):
