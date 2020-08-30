@@ -184,7 +184,9 @@ class QBNTrainer():
         batch = []
         stats = dict()
         stats['num_episodes'] = 0
+        print('total_rollout:',num_rollout_steps)
         while len(batch) < num_rollout_steps:
+            print("len(rollout):",len(batch))
             if self.args.noisy_rollouts:
                 # TODO: implement noisy rollouts
                 raise NotImplementedError

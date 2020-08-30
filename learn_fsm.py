@@ -62,7 +62,9 @@ parser.add_argument('--hidden_quantize_size', default=32, type=int,
 parser.add_argument('--generate_FSM', action='store_true', default=False,
                     help='generate_FSM')
 parser.add_argument('--eval_min_FSM', action='store_true', default=False,
-                    help='evaluate_minimized_FSM')                   
+                    help='evaluate_minimized_FSM')      
+parser.add_argument('--functional_pruning', action='store_true', default=False,
+                    help='functional pruning')              
 
 # optimization
 parser.add_argument('--gamma', type=float, default=1.0,
@@ -273,8 +275,7 @@ def run():
         print('Generate moore-machine')
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                     policy_net, mmn_directory, storage, writer)
-        moore_machine.make_fsm(num_rollout_steps=300, seed=args.seed)
-        ipdb.set_trace()
+        moore_machine.make_fsm(num_rollout_steps=100*args.max_steps, seed=args.seed, saved=False)
         moore_machine.save(open(os.path.join(mmn_directory, 'fsm.txt'), 'w'))
         print('fsm saved')
 
@@ -288,6 +289,9 @@ def run():
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                     policy_net, mmn_directory, storage, writer)
         moore_machine.evaluate(num_episodes=100, seed=args.seed)
+    
+    elif args.functional_pruning:
+        
 
 
 def save(path):
