@@ -177,14 +177,14 @@ class CommNetMLP(nn.Module):
         n = self.nagents
 
         num_agents_alive, agent_mask = self.get_agent_mask(batch_size, info)
-
+        
         # Hard Attention - action whether an agent communicates or not
         if self.args.hard_attn:
             comm_action = torch.tensor(info['comm_action'])
             comm_action_mask = comm_action.expand(batch_size, n, n).unsqueeze(-1)
             # action 1 is talk, 0 is silent i.e. act as dead for comm purposes.
             agent_mask = agent_mask * comm_action_mask.double()
-
+        
         agent_mask_transpose = agent_mask.transpose(1, 2)
 
         for i in range(self.comm_passes):
@@ -211,7 +211,6 @@ class CommNetMLP(nn.Module):
             comm = comm * agent_mask
             # Mask communication to dead agents
             comm = comm * agent_mask_transpose
-
             # Combine all of C_j for an ith agent which essentially are h_j
             comm_sum = comm.sum(dim=1)
             c = self.C_modules[i](comm_sum)
@@ -280,7 +279,7 @@ class CommNetMLP(nn.Module):
                           }
 
                 # BK: For generating FSM, we have to return quantized_(obs,comm,hx)
-                if self.args.generate_FSM:
+                if self.args.generate_FSM or self.args.eval_min_FSM:
                     latent['q_x'] = q_x.squeeze()
                     latent['q_c'] = q_c.squeeze()
                     latent['q_ht1'] = q_ht1

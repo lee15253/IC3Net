@@ -3,7 +3,7 @@ import torch.autograd as autograd
 from torch.autograd import Variable, Function
 import torch.nn as nn
 import torch.nn.functional as F
-
+import ipdb
 
 class TernarizeTanhF(Function):
     @staticmethod
@@ -27,7 +27,8 @@ class TernaryTanh(nn.Module):
         super(TernaryTanh, self).__init__()
 
     def forward(self, input):
-        output = 1.5 * F.tanh(input) + 0.5 * F.tanh(-3 * input)
+        # output = 1.5 * F.tanh(input) + 0.5 * F.tanh(-3 * input)
+        output = 1.5 * torch.tanh(input) + 0.5 * torch.tanh(-3 * input)
         output = TernarizeTanhF.apply(output)
         return output
 

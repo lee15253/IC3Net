@@ -252,7 +252,7 @@ def run():
     mmn_directory = os.path.dirname(args.load) + '/' + args.dest
 
     # When generating FSM, skip 3~5
-    if not (args.generate_FSM or args.eval_min_FSM):
+    if not (args.generate_FSM or args.eval_min_FSM or args.functional_pruning):
         # 3. Collect Trajectory from the trained model
         print('Collect trajectory from the trained model')
         mm_net = MMNet(policy_net)
@@ -283,14 +283,21 @@ def run():
         moore_machine.save(open(os.path.join(mmn_directory, 'minimized_fsm.txt'), 'w'))
         print('minimized fsm saved')
 
+
+
     elif args.eval_min_FSM:
         # 7. evaluate minimized FSM
         moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
                                     policy_net, mmn_directory, storage, writer)
-        moore_machine.evaluate(num_episodes=100, seed=args.seed)
+        moore_machine.evaluate(num_rollout_steps=8000, seed=args.seed)
     
-    elif args.functional_pruning:
 
+    elif args.functional_pruning:
+        # 8. functional pruning
+        moore_machine = MooreMachine(args, env, obs_qb_net, comm_qb_net, hidden_qb_net,
+                                    policy_net, mmn_directory, storage, writer)
+        moore_machine.functional_pruning()
+        
 
 
 def save(path):

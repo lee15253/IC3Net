@@ -89,6 +89,7 @@ class MooreMachine():
         np.random.seed(seed)
         torch.manual_seed(seed)
         
+        self.FSM_rollout_steps = num_rollout_steps
         self.model.eval()
         self.qbn_trainer.perform_rollouts(self.model, num_rollout_steps,
                                            net_type = 'fine_tuned_model(before_FSM)', store = True)
@@ -174,9 +175,7 @@ class MooreMachine():
             # if qh_index not in self.transaction:  
             #     self.transaction[qh_index] = {i: None for i in total_qx_qc}
             #     # new_entries += [(s_i, str(i)+'_'+str(j)) for i in range(len(self.obs_space)) for j in range(len(self.comm_space))]
-            #     # self.transaction[qh_index] = {qx_qc: None}  FIXME: minimize시, 내 코드대로 하면 걍 상관없는것까지 compat_mat이 True가 되버리는 것 같다. 내 코드 잠시 off
-            # elif qx_qc not in self.transaction[qh_index]:
-            #     # self.transaction[qh_index][qx_qc] = None  FIXME: 내 코드 잠시 off
+            # # elif qx_qc not in self.transaction[qh_index]:
             #     for i in total_qx_qc:
             #         if i not in self.transaction[qh_index]:
             #             self.transaction[qh_index][i] = None
@@ -208,7 +207,9 @@ class MooreMachine():
                         self.transaction[qh_t1_index] = {}
 
             self.transaction[qh_index][qx_qc] = qh_t1_index
-
+            if t%1000==0:
+                print('현재t:',t)
+        
         return new_entries
 
     
@@ -256,6 +257,7 @@ class MooreMachine():
         qc = [list(v.keys()) for i,v in self.transaction.items()]
         qc = list(itertools.chain.from_iterable(qc))
         qc = list(set(qc))
+        info_file.write('rollout_steps:{}\n'.format(self.FSM_rollout_steps))
 
         if not self.minimized:
             info_file.write('Total Unique Obs-comm 조합:{}\n'.format(len(qc)))
@@ -278,6 +280,13 @@ class MooreMachine():
         for k in sorted(self.state_desc.keys()):
             _state_info = self.state_desc[k]['description' if not self.minimized else 'sub_states']
             t1.add_row([k, self.state_desc[k]['action'], _state_info])
+        info_file.write(t1.__str__() + '\n')
+
+        # ot - ct list
+        info_file.write('\n\nObs-Comm table:\n')
+        t1 = PrettyTable(["Name","Ot_Ct"])
+        for index, k in enumerate(sorted(qc)):
+            t1.add_row([index, k])
         info_file.write(t1.__str__() + '\n')
 
         # transaction table
@@ -330,6 +339,7 @@ class MooreMachine():
         while len(unknowns) != 0:
             pbar.update(1)
             # TODO: next 3 lines are experimental  
+            # 해결이 안된 것들은 -> 같은 state로 묶어주는듯 (원본 코드를 믿는다!)
             if len(unknown_lengths) > 0 and unknown_lengths.count(unknown_lengths[0]) == unknown_lengths.maxlen:
                 ipdb.set_trace()
                 s, k = unknowns[-1]
@@ -487,14 +497,17 @@ class MooreMachine():
 
         self.transaction = min_trans
         self.state_desc = new_state_info
+        self.original_state_space = self.state_space
         self.state_space = list(self.transaction.keys())
         self.start_state = start_state_p
         self.obs_minobs_map = _obs_minobs_map
         self.minobs_obs_map = _minobs_obs_map
         self.minimized = True
 
+
         # save minimized_files
-        minimized_files = [self.transaction, self.state_desc, self.state_space, self.start_state, self.obs_minobs_map, self.minobs_obs_map, self.minimized]
+        minimized_files = [self.transaction, self.state_desc, self.state_space, self.start_state, self.obs_minobs_map, \
+                             self.minobs_obs_map, self.minimized, self.obs_space, self.comm_space, self.original_state_space]
         with open(os.path.join(self.mmn_directory,'minimized_files.p'), 'wb') as handle:
             pickle.dump(minimized_files, handle, protocol = pickle.HIGHEST_PROTOCOL)
         
@@ -519,8 +532,9 @@ class MooreMachine():
                     _states = states[:i] + [sorted(list(set(s + s_next)))] + states[i + j + 2:]
                     return MooreMachine.traverse_compatible_states(_states, compatibility_mat)
         return states
-    
-    def evaluate(self, num_episodes, seed):
+
+    def functional_pruning(self):
+
         with open(os.path.join(self.mmn_directory, 'minimized_files.p'), 'rb') as handle:
             m_files = pickle.load(handle)
 
@@ -531,31 +545,16 @@ class MooreMachine():
         self.obs_minobs_map = m_files[4]
         self.minobs_obs_map = m_files[5]
         self.minimized = m_files[6]
+        self.obs_space = m_files[7]
+        self.comm_space = m_files[8]
+        self.original_state_space = m_files[9]
 
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        ipdb.set_trace()
+        print('a')    
+    
+    def evaluate(self, num_rollout_steps, seed):
 
-        self.model.eval()
-        total_reward = 0
-        # For convenience
-        # MM_net = self.model
-        # Comm_net = self.model.call_model()
+        self.qbn_trainer.perform_rollouts(self.model, num_rollout_steps,
+                                           net_type = 'evaluation(minimized_FSM)', store = False, eval_mode=True)
 
-        # with torch.no_grad():
-
-        #     for ep in range(num_episodes):
-        #         x = self.env.reset(epoch=0)
-        #         prev_state = self.model.policy_net.init_hidden(batch_size=x.shape[0])
-        #         ep_reward = 0
-        #         # curr_state = self.second_state[np.random.choice(len(self.second_state))]  # random from second_state
-        #         # TODO: quantized는 agent_0기준으로 했지만, 갈아끼는건 모든 agent를 갈아낀다.
-
-        #         # TODO: t=0초일 때, prev_hid가 0인데
-        #         # transaction table에는 
-        #         ipdb.set_trace()
-        #         for t in range(self.args.max_steps):
-        #             x = Comm_net.encoder(x)
-        #             _, q_x = MM_net.obs_qb_net(x)
-        #             pass
-                    
+        # TODO: quantized는 agent_0 기준으로 함. 1. 먼저 얘만 갈아껴보고 2. 전부다 갈아껴보자
